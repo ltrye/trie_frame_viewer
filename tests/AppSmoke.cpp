@@ -18,6 +18,60 @@ static void clickItem(QQuickWindow& window, QQuickItem* item) {
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
 }
 
+static bool editFrameFields(QQuickWindow& window, tfv::PlayerController& player) {
+    const int originalStart = player.rangeStart(), originalEnd = player.rangeEnd();
+    window.grabWindow(); // Complete hidden-window layout before clicking fields.
+    const auto edit = [&](const char* name, const QString& text, Qt::Key key = Qt::Key_Return) {
+        auto* field = window.findChild<QQuickItem*>(name);
+        if (!field)
+            return false;
+        clickItem(window, field);
+        field->forceActiveFocus();
+        QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
+        for (auto character : text)
+            QTest::keyClick(&window, character.toLatin1());
+        QTest::keyClick(&window, key);
+        QCoreApplication::processEvents();
+        return true;
+    };
+    bool valid = edit("playbackStartField", "9") && player.rangeStart() == 8;
+    valid = edit("playbackEndField", "32") && player.rangeEnd() == 31 && valid;
+    valid = edit("currentFrameField", "17") && player.currentFrame() == 16 && valid;
+
+    // Below-range values cannot commit. Moving focus restores the model value.
+    valid = edit("playbackStartField", "0") && valid;
+    auto* current = window.findChild<QQuickItem*>("currentFrameField");
+    auto* start = window.findChild<QQuickItem*>("playbackStartField");
+    if (!current || !start)
+        return false;
+    current->forceActiveFocus();
+    QCoreApplication::processEvents();
+    valid = player.rangeStart() == 8 && start->property("text").toString() == "9" && valid;
+    valid = edit("playbackStartField", "12", Qt::Key_Escape) && player.rangeStart() == 8 && valid;
+
+    // A valid edit commits on focus loss too, and controller seeks keep the display in sync.
+    valid = edit("playbackStartField", "10", Qt::Key_Tab) && player.rangeStart() == 9 && valid;
+    current->setFocus(false);
+    start->setFocus(false);
+    auto* end = window.findChild<QQuickItem*>("playbackEndField");
+    if (!end)
+        return false;
+    end->setFocus(false);
+    player.setRange(originalStart, originalEnd);
+    player.seek(24);
+    QCoreApplication::processEvents();
+    valid = current->property("text").toString() == "25" && valid;
+    // Focusing a field without editing must not undo subsequent playback updates.
+    current->forceActiveFocus();
+    player.seek(25);
+    end->forceActiveFocus();
+    QCoreApplication::processEvents();
+    valid = player.currentFrame() == 25 && valid;
+    player.seek(24);
+    // Leave a range field focused to exercise source reload with active input.
+    return valid;
+}
+
 static bool centeredButtons(QQuickWindow& window) {
     int count = 0;
     for (auto* contents : window.findChildren<QQuickItem*>("buttonContents")) {
@@ -148,6 +202,7 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         if (*done || !player.loaded() || player.cacheUsedMiB() < 1)
             return;
         *done = true;
+        const bool frameFieldsValid = editFrameFields(window, player);
         player.seek(24);
         player.addBookmark(false, "#e6bf79");
         player.setRange(4, 36);
@@ -160,10 +215,17 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
             return;
         }
         player.openProject(QUrl::fromLocalFile(path));
-        QTimer::singleShot(1500, &app, [&, directory] {
+        QTimer::singleShot(1500, &app, [&, directory, frameFieldsValid] {
             auto* panel = window.findChild<QQuickItem*>("bookmarkPanel");
             QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
             const bool railDefault = panel && panel->property("collapsed").toBool() && panel->width() == 72;
+            const auto fieldValue = [&](const char* name) {
+                auto* field = window.findChild<QQuickItem*>(name);
+                return field ? field->property("text").toString() : QString{};
+            };
+            const bool fieldsRestored = fieldValue("playbackStartField") == "5" &&
+                                        fieldValue("playbackEndField") == "37" &&
+                                        fieldValue("currentFrameField") == "25";
             auto report = std::make_shared<QJsonObject>(QJsonObject{
                 {"loaded", player.loaded()},
                 {"frame", player.currentFrame()},
@@ -176,6 +238,8 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                 {"audioAvailable", player.audioAvailable()},
                 {"bookmarkRailDefault", railDefault},
                 {"buttonsCentered", centeredButtons(window)},
+                {"frameFieldsEditAndSync", frameFieldsValid},
+                {"frameFieldsRestoreWithProject", fieldsRestored},
                 {"menuCount", menus.count()},
                 {"darkCaptionMatches", nativeCaptionMatches(window, true)},
                 {"graphicsBackend",
@@ -185,7 +249,8 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                 player.loaded() && player.currentFrame() == 24 &&
                 player.bookmarks()->property("count").toInt() == 2 && player.rotation() == 90 &&
                 player.flipH() && !player.dirty() && player.error().isEmpty() && railDefault &&
-                centeredButtons(window) && menus.count() == 8 && nativeCaptionMatches(window, true));
+                centeredButtons(window) && frameFieldsValid && fieldsRestored && menus.count() == 8 &&
+                nativeCaptionMatches(window, true));
             *valid = window.grabWindow().save(directory + "/review-dark.png") && *valid;
             stage(directory, "Starting forward playback");
             if (qEnvironmentVariableIsSet("TFV_SMOKE_SILENT"))

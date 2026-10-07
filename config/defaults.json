@@ -17,7 +17,7 @@
   "playbackSpeeds": [0.25, 0.5, 1, 1.5, 2, 4],
   "zoomWheelFactor": 1.12,
   "actions": [
-    {"id": "openMedia", "label": "Open footage", "shortcut": "Ctrl+O", "icon": "folder"},
+    {"id": "openMedia", "label": "Open Media", "shortcut": "Ctrl+O", "icon": "folder"},
     {"id": "openProject", "label": "Open project", "shortcut": "Ctrl+Shift+O", "icon": "folder"},
     {"id": "saveProject", "label": "Save project", "shortcut": "Ctrl+S", "icon": "save"},
     {"id": "saveProjectAs", "label": "Save project as", "shortcut": "Ctrl+Shift+S", "icon": "save"},

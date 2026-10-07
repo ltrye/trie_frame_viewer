@@ -50,7 +50,7 @@ qt_add_qml_module(TrieFrameViewer
         ui/Main.qml ui/Theme.qml ui/IconPaths.qml
         ui/components/Icon.qml ui/components/ToolButton.qml ui/components/AppMenuBar.qml
         ui/components/Chip.qml ui/components/SectionLabel.qml
-        ui/components/SelectControl.qml ui/components/ValueSlider.qml
+        ui/components/SelectControl.qml ui/components/ValueSlider.qml ui/components/FrameInput.qml
         ui/components/Timeline.qml ui/components/BookmarkCard.qml
         ui/views/Viewer.qml ui/views/Transport.qml
         ui/views/BookmarkPanel.qml ui/views/SettingsDialog.qml

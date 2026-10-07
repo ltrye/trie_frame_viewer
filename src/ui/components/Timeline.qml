@@ -125,30 +125,4 @@ Item {
             color: Theme.ink
         }
     }
-    Row {
-        x: timeline.trackLeft
-        y: Theme.spaceXl + Theme.spaceLg + Theme.spaceSm
-        spacing: Theme.spaceMd
-        Text {
-            text: player.loaded ? "1" : "—"
-            color: Theme.muted
-            font.family: Theme.monoFont
-            font.pixelSize: Theme.textSmall
-        }
-        Text {
-            text: player.loaded ? "IN " + (player.rangeStart + 1) + "   /   OUT " + (player.rangeEnd + 1) : "Playback range"
-            color: Theme.secondary
-            font.family: Theme.monoFont
-            font.pixelSize: Theme.textSmall
-        }
-    }
-    Text {
-        anchors.right: parent.right
-        anchors.rightMargin: Theme.spaceLg
-        y: Theme.spaceXl + Theme.spaceLg + Theme.spaceSm
-        text: player.loaded ? player.frameCount : "—"
-        color: Theme.muted
-        font.family: Theme.monoFont
-        font.pixelSize: Theme.textSmall
-    }
 }

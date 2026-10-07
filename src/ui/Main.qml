@@ -149,7 +149,7 @@ Controls.ApplicationWindow {
     }
     FileDialog {
         id: mediaDialog
-        title: qsTr("Open footage or an image sequence frame")
+        title: qsTr("Open Media")
         nameFilters: [qsTr("Footage (*.mp4 *.mov *.mkv *.avi *.webm *.m4v *.png *.jpg *.jpeg *.bmp *.tif *.tiff)"), qsTr("All files (*)")]
         onAccepted: player.openMedia(selectedFile)
     }
@@ -317,39 +317,6 @@ Controls.ApplicationWindow {
                 collapsed: !app.bookmarksExpanded
                 onToggleRequested: app.dispatch("toggleBookmarks")
                 onAddRequested: range => app.bookmark(range)
-            }
-        }
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.controlHeight - Theme.spaceXs
-            color: Theme.surface
-            RowLayout {
-                anchors {
-                    fill: parent
-                    leftMargin: Theme.spaceLg
-                    rightMargin: Theme.spaceLg
-                }
-                spacing: Theme.spaceSm
-                Rectangle {
-                    width: 5
-                    height: 5
-                    radius: 3
-                    color: player.loading ? Theme.warning : Theme.accent
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: player.status
-                    color: Theme.secondary
-                    font.family: Theme.font
-                    font.pixelSize: Theme.textSmall
-                    elide: Text.ElideRight
-                }
-                Text {
-                    text: player.loaded ? qsTr("RAM  ") + Math.round(player.cacheUsedMiB) + " / " + preferences.cacheMiB + " MiB" : qsTr("FRAME BY FRAME. AT YOUR PACE.")
-                    color: Theme.muted
-                    font.family: Theme.monoFont
-                    font.pixelSize: Theme.textSmall
-                }
             }
         }
     }

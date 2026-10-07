@@ -5,36 +5,86 @@ import Trie.FrameViewer
 
 Item {
     id: transport
+    objectName: "playbackBar"
     required property var player
     required property var preferences
-    implicitHeight: Theme.toolbarHeight
-    RowLayout {
+    implicitHeight: Theme.playbackBarHeight
+    readonly property bool compact: width < frameFields.implicitWidth * 2 + playbackControls.implicitWidth + Theme.spaceLg * 2 + Theme.spaceMd * 2
+    ColumnLayout {
+        id: frameFields
+        objectName: "playbackFrameFields"
         anchors {
-            fill: parent
+            left: parent.left
+            verticalCenter: parent.verticalCenter
             leftMargin: Theme.spaceLg
-            rightMargin: Theme.spaceLg
         }
-        spacing: transport.width < 700 ? Theme.spaceSm : Theme.spaceMd
-        ColumnLayout {
-            Layout.preferredWidth: transport.width < 700 ? 100 : 140
-            spacing: Theme.spaceXs
+        spacing: Theme.spaceXs
+        RowLayout {
+            spacing: Theme.spaceSm
             Text {
-                text: player.loaded ? String(player.currentFrame + 1).padStart(4, "0") + " / " + String(player.frameCount).padStart(4, "0") : "— / —"
-                font.family: Theme.monoFont
-                font.pixelSize: Theme.textBody
-                color: Theme.ink
-            }
-            Text {
-                text: qsTr("CURRENT FRAME")
+                text: qsTr("Start")
+                color: Theme.secondary
                 font.family: Theme.font
-                font.pixelSize: Theme.textSmall - 1
+                font.pixelSize: Theme.textBody
+            }
+            FrameInput {
+                objectName: "playbackStartField"
+                label: qsTr("Start frame")
+                enabled: player.loaded
+                frameNumber: player.rangeStart + 1
+                maximumFrame: Math.max(1, player.rangeEnd + 1)
+                onFrameSubmitted: frame => player.setRange(frame - 1, player.rangeEnd)
+            }
+            Text {
+                text: "|"
                 color: Theme.muted
-                font.letterSpacing: 1
+                font.family: Theme.font
+                font.pixelSize: Theme.textBody
+            }
+            Text {
+                text: qsTr("End")
+                color: Theme.secondary
+                font.family: Theme.font
+                font.pixelSize: Theme.textBody
+            }
+            FrameInput {
+                objectName: "playbackEndField"
+                label: qsTr("End frame")
+                enabled: player.loaded
+                frameNumber: player.rangeEnd + 1
+                minimumFrame: player.rangeStart + 1
+                maximumFrame: Math.max(1, player.frameCount)
+                onFrameSubmitted: frame => player.setRange(player.rangeStart, frame - 1)
             }
         }
-        Item {
-            Layout.fillWidth: true
+        RowLayout {
+            spacing: Theme.spaceSm
+            Text {
+                text: qsTr("Current frame")
+                color: Theme.secondary
+                font.family: Theme.font
+                font.pixelSize: Theme.textBody
+            }
+            FrameInput {
+                objectName: "currentFrameField"
+                label: qsTr("Current frame")
+                enabled: player.loaded
+                frameNumber: player.currentFrame + 1
+                maximumFrame: Math.max(1, player.frameCount)
+                onFrameSubmitted: frame => {
+                    player.execute("pause");
+                    player.seek(frame - 1);
+                }
+            }
         }
+    }
+    RowLayout {
+        id: playbackControls
+        objectName: "playbackControls"
+        anchors.verticalCenter: parent.verticalCenter
+        x: Math.max(frameFields.x + frameFields.width + Theme.spaceMd, (transport.width - width) / 2)
+        width: implicitWidth
+        spacing: Theme.spaceSm
         Row {
             spacing: Theme.spaceXs
             ToolButton {
@@ -105,18 +155,22 @@ Item {
             displayText: player.speed + "×"
             onActivated: player.speed = model[index]
         }
-        Item {
-            Layout.fillWidth: true
+    }
+    RowLayout {
+        anchors {
+            right: parent.right
+            verticalCenter: parent.verticalCenter
+            rightMargin: Theme.spaceLg
         }
+        visible: !transport.compact
+        spacing: Theme.spaceSm
         ToolButton {
             iconName: preferences.volume > 0 ? "volume" : "mute"
-            visible: transport.width >= 700
             hint: qsTr("Mute / unmute")
             enabled: player.audioAvailable
             onClicked: preferences.toggleMute()
         }
         ValueSlider {
-            visible: transport.width >= 700
             Layout.preferredWidth: 70
             from: 0
             to: 1

@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls as Controls
-import QtQuick.Layouts
 import Trie.FrameViewer
 import Trie.Media
 
@@ -70,59 +69,15 @@ Item {
             wheel.accepted = true;
         }
     }
-    ColumnLayout {
+    ToolButton {
+        objectName: "openMediaButton"
         anchors.centerIn: parent
-        spacing: Theme.spaceLg
         visible: !player.loaded
-        Rectangle {
-            Layout.alignment: Qt.AlignHCenter
-            width: 68
-            height: 68
-            radius: Theme.radiusLg
-            color: Theme.surface
-            border.color: Theme.border
-            Icon {
-                anchors.centerIn: parent
-                name: "film"
-                width: 30
-                height: 30
-                color: Theme.secondary
-            }
-        }
-        ColumnLayout {
-            spacing: Theme.spaceSm
-            Layout.alignment: Qt.AlignHCenter
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: player.loading ? qsTr("Opening your footage…") : qsTr("A closer look at every frame.")
-                color: Theme.ink
-                font.family: Theme.font
-                font.pixelSize: Theme.textHero
-                font.weight: Font.DemiBold
-            }
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Reference footage, playblasts, and the poses worth keeping.")
-                color: Theme.secondary
-                font.family: Theme.font
-                font.pixelSize: Theme.textBody
-            }
-        }
-        ToolButton {
-            Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Open footage")
-            iconName: "folder"
-            primary: true
-            enabled: !player.loading
-            onClicked: viewer.openRequested()
-        }
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Drop a video, image sequence, or .tfv project here")
-            color: Theme.muted
-            font.family: Theme.font
-            font.pixelSize: Theme.textSmall
-        }
+        text: qsTr("Open Media")
+        iconName: "folder"
+        primary: true
+        enabled: !player.loading
+        onClicked: viewer.openRequested()
     }
     Row {
         anchors {

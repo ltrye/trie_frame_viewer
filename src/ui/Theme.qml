@@ -37,6 +37,9 @@ QtObject {
     readonly property int controlHeight: 34
     readonly property int iconSize: 18
     readonly property int toolbarHeight: 62
+    readonly property int playbackBarHeight: 76
+    readonly property int frameFieldHeight: 26
+    readonly property int frameFieldMinWidth: 70
     readonly property int menuBarHeight: 24
     readonly property int menuItemHeight: 30
     readonly property int menuTextSize: 12
@@ -44,7 +47,7 @@ QtObject {
     readonly property int bookmarkRailWidth: 72
     readonly property int sidebarWidth: 220
     readonly property int bookmarkRowHeight: 38
-    readonly property int timelineHeight: 90
+    readonly property int timelineHeight: 56
     readonly property int transitionMs: 110
     readonly property int defaultWidth: 1160
     readonly property int defaultHeight: 800
