@@ -1,0 +1,21 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "windows",
+      "displayName": "Windows x64 development",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "${sourceDir}/.tools/Qt/6.8.3/msvc2022_64",
+        "FFMPEG_ROOT": "${sourceDir}/.tools/ffmpeg",
+        "CMAKE_INSTALL_BINDIR": ".",
+        "CMAKE_INSTALL_LIBDIR": ".",
+        "BUILD_TESTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [{"name": "windows", "configurePreset": "windows", "configuration": "Release"}],
+  "testPresets": [{"name": "windows", "configurePreset": "windows", "configuration": "Release", "output": {"outputOnFailure": true}}]
+}

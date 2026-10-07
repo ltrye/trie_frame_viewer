@@ -1,0 +1,23 @@
+qt_add_executable(tfv_tests CoreTests.cpp)
+qt_add_executable(tfv_audio_tests AudioTests.cpp)
+qt_add_executable(tfv_engine_benchmark EngineBench.cpp)
+target_link_libraries(tfv_engine_benchmark PRIVATE tfv_core psapi)
+install(TARGETS tfv_engine_benchmark RUNTIME DESTINATION .)
+qt_add_executable(tfv_renderer_tests RendererTests.cpp
+    ../src/presentation/VideoItem.cpp ../src/presentation/VideoItem.h
+    ../src/presentation/YuvNode.cpp ../src/presentation/YuvNode.h)
+target_link_libraries(tfv_renderer_tests PRIVATE tfv_core Qt6::Test Qt6::Quick Qt6::GuiPrivate)
+qt_add_shaders(tfv_renderer_tests tfv_test_shaders BATCHABLE PREFIX "/tfv" BASE "../src/presentation"
+    FILES ../src/presentation/shaders/yuv.vert ../src/presentation/shaders/yuv.frag)
+add_test(NAME renderer COMMAND tfv_renderer_tests -o "${CMAKE_BINARY_DIR}/Testing/renderer-results.txt,txt")
+set_tests_properties(renderer PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${Qt6_DIR}/../../../bin;PATH=path_list_prepend:${FFMPEG_ROOT}/bin")
+target_link_libraries(tfv_audio_tests PRIVATE tfv_core Qt6::Test)
+add_test(NAME audio COMMAND tfv_audio_tests -o "${CMAKE_BINARY_DIR}/Testing/audio-results.txt,txt")
+set_tests_properties(audio PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${Qt6_DIR}/../../../bin;PATH=path_list_prepend:${FFMPEG_ROOT}/bin")
+target_link_libraries(tfv_tests PRIVATE tfv_core Qt6::Test)
+add_test(NAME core COMMAND tfv_tests -o "${CMAKE_BINARY_DIR}/Testing/core-results.txt,txt")
+set_tests_properties(core PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${Qt6_DIR}/../../../bin;PATH=path_list_prepend:${FFMPEG_ROOT}/bin")
+file(GLOB ffmpeg_test_dlls "${FFMPEG_ROOT}/bin/*.dll")
+foreach(dll IN LISTS ffmpeg_test_dlls)
+    add_custom_command(TARGET tfv_tests POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "${dll}" "$<TARGET_FILE_DIR:tfv_tests>")
+endforeach()
