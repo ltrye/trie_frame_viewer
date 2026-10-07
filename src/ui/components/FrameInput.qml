@@ -30,6 +30,13 @@ Controls.TextField {
     opacity: enabled ? 1 : 0.4
     Accessible.name: label
 
+    HoverHandler {
+        id: hover
+    }
+    Controls.ToolTip.visible: hover.hovered
+    Controls.ToolTip.text: label
+    Controls.ToolTip.delay: Theme.tooltipDelay
+
     TextMetrics {
         id: metrics
         font: control.font

@@ -103,17 +103,49 @@ class CoreTests : public QObject {
     }
     void bookmarksRoundTripAndRejectInvalidBounds() {
         tfv::BookmarkModel original;
-        original.add(24, 24, false, "#a8d5c2");
-        original.add(4, 36, true, "#e6bf79");
-        original.rename(0, "Contact pose");
+        original.add(24, "#a8d5c2");
+        original.add(36, "#e6bf79");
+        const auto id = original.at(1)->id;
+        original.rename(id, "Contact pose");
+        QVERIFY(!original.setFrame(id, -1, 100));
+        QVERIFY(!original.setFrame(id, 100, 100));
+        QVERIFY(original.setFrame(id, 4, 100));
         tfv::BookmarkModel restored;
         QString error;
         QVERIFY(restored.load(original.toJson(), 100, error));
         QCOMPARE(restored.rowCount(), 2);
-        QCOMPARE(restored.at(0)->name, QString("Contact pose"));
+        QCOMPARE(restored.find(id)->name, QString("Contact pose"));
         QCOMPARE(restored.adjacentFrame(24, true), 4);
-        QVERIFY(!restored.load(original.toJson(), 30, error));
+        QVERIFY(!restored.load(original.toJson(), 20, error));
         QCOMPARE(restored.rowCount(), 2);
+        restored.remove(restored.at(0)->id);
+        restored.rename(id, "Renamed after another bookmark was deleted");
+        QCOMPARE(restored.at(0)->id, id);
+        QCOMPARE(restored.at(0)->name, QString("Renamed after another bookmark was deleted"));
+        QSignalSpy edited(&restored, &tfv::BookmarkModel::edited);
+        restored.rename("missing-id", "No change");
+        restored.rename(id, "   ");
+        QVERIFY(!restored.setFrame("missing-id", 1, 100));
+        QVERIFY(edited.isEmpty());
+    }
+    void legacyRangeBookmarksBecomeNamedFrameBookmarks() {
+        const QJsonArray legacy{QJsonObject{{"id", "range-id"},
+                                            {"name", "Walk cycle"},
+                                            {"color", "#a8d5c2"},
+                                            {"type", "range"},
+                                            {"start", 4},
+                                            {"endInclusive", 36}}};
+        tfv::BookmarkModel model;
+        QString error;
+        QVERIFY(model.load(legacy, 100, error));
+        QCOMPARE(model.at(0)->frame, 4);
+        QCOMPARE(model.at(0)->name, QString("Walk cycle"));
+        const auto saved = model.toJson().at(0).toObject();
+        QCOMPARE(saved["type"].toString(), QString("frame"));
+        QCOMPARE(saved["start"].toInt(), 4);
+        QCOMPARE(saved["endInclusive"].toInt(), 4);
+        QVERIFY(!model.load(legacy, 30, error));
+        QCOMPARE(model.at(0)->frame, 4);
     }
     void projectUsesRelativeMediaAndAtomicRoundTrip() {
         QTemporaryDir directory;

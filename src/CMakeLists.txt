@@ -51,9 +51,9 @@ qt_add_qml_module(TrieFrameViewer
         ui/components/Icon.qml ui/components/ToolButton.qml ui/components/AppMenuBar.qml
         ui/components/Chip.qml ui/components/SectionLabel.qml
         ui/components/SelectControl.qml ui/components/ValueSlider.qml ui/components/FrameInput.qml
-        ui/components/Timeline.qml ui/components/BookmarkCard.qml
+        ui/components/Timeline.qml ui/components/BookmarkEditor.qml
         ui/views/Viewer.qml ui/views/Transport.qml
-        ui/views/BookmarkPanel.qml ui/views/SettingsDialog.qml
+        ui/views/SettingsDialog.qml
 )
 set_target_properties(TrieFrameViewer PROPERTIES OUTPUT_NAME "TrieFrameViewer")
 install(TARGETS TrieFrameViewer RUNTIME DESTINATION .)

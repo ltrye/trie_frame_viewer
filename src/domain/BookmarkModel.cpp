@@ -20,35 +20,41 @@ QVariant BookmarkModel::data(const QModelIndex& index, int role) const {
         return b->name;
     case ColorRole:
         return b->color;
-    case StartRole:
-        return b->start;
-    case EndRole:
-        return b->end;
-    case RangeRole:
-        return b->range;
+    case FrameRole:
+        return b->frame;
     default:
         return {};
     }
 }
 QHash<int, QByteArray> BookmarkModel::roleNames() const {
-    return {{IdRole, "bookmarkId"},    {NameRole, "bookmarkName"}, {ColorRole, "bookmarkColor"},
-            {StartRole, "startFrame"}, {EndRole, "endFrame"},      {RangeRole, "isRange"}};
+    return {{IdRole, "bookmarkId"},
+            {NameRole, "bookmarkName"},
+            {ColorRole, "bookmarkColor"},
+            {FrameRole, "bookmarkFrame"}};
 }
 const Bookmark* BookmarkModel::at(int row) const {
     return row >= 0 && row < m_items.size() ? &m_items[row] : nullptr;
 }
-void BookmarkModel::add(int start, int end, bool range, const QString& color) {
+int BookmarkModel::rowForId(const QString& id) const {
+    for (int row = 0; row < m_items.size(); ++row)
+        if (m_items[row].id == id)
+            return row;
+    return -1;
+}
+const Bookmark* BookmarkModel::find(const QString& id) const {
+    return at(rowForId(id));
+}
+void BookmarkModel::add(int frame, const QString& color) {
     const int row = rowCount();
     beginInsertRows({}, row, row);
-    m_items.append(
-        {QUuid::createUuid().toString(QUuid::WithoutBraces),
-         range ? QString("Range %1–%2").arg(start + 1).arg(end + 1) : QString("Pose at %1").arg(start + 1),
-         color, start, end, range});
+    m_items.append({QUuid::createUuid().toString(QUuid::WithoutBraces), QString("Pose at %1").arg(frame + 1),
+                    color, frame});
     endInsertRows();
     emit countChanged();
     emit edited();
 }
-void BookmarkModel::remove(int row) {
+void BookmarkModel::remove(const QString& id) {
+    const int row = rowForId(id);
     if (!at(row))
         return;
     beginRemoveRows({}, row, row);
@@ -57,17 +63,29 @@ void BookmarkModel::remove(int row) {
     emit countChanged();
     emit edited();
 }
-void BookmarkModel::rename(int row, const QString& name) {
-    if (!at(row) || name.trimmed().isEmpty())
+void BookmarkModel::rename(const QString& id, const QString& name) {
+    const int row = rowForId(id);
+    if (!at(row) || name.trimmed().isEmpty() || m_items[row].name == name.trimmed())
         return;
     m_items[row].name = name.trimmed();
     emit dataChanged(index(row), index(row), {NameRole});
     emit edited();
 }
+bool BookmarkModel::setFrame(const QString& id, int frame, int frameCount) {
+    const int row = rowForId(id);
+    if (!at(row) || frame < 0 || frame >= frameCount)
+        return false;
+    if (m_items[row].frame != frame) {
+        m_items[row].frame = frame;
+        emit dataChanged(index(row), index(row), {FrameRole});
+        emit edited();
+    }
+    return true;
+}
 int BookmarkModel::adjacentFrame(int current, bool forward) const {
     QList<int> frames;
     for (const auto& b : m_items)
-        frames.append(b.start);
+        frames.append(b.frame);
     if (frames.isEmpty())
         return current;
     std::sort(frames.begin(), frames.end());
@@ -88,9 +106,9 @@ QJsonArray BookmarkModel::toJson() const {
         result.append(QJsonObject{{"id", b.id},
                                   {"name", b.name},
                                   {"color", b.color},
-                                  {"type", b.range ? "range" : "frame"},
-                                  {"start", b.start},
-                                  {"endInclusive", b.end}});
+                                  {"type", "frame"},
+                                  {"start", b.frame},
+                                  {"endInclusive", b.frame}});
     return result;
 }
 bool BookmarkModel::load(const QJsonArray& values, int frameCount, QString& error) {
@@ -108,7 +126,8 @@ bool BookmarkModel::load(const QJsonArray& values, int frameCount, QString& erro
             return false;
         }
         ids.insert(id);
-        parsed.append({id, o.value("name").toString(), color, start, end, type == "range"});
+        // Version 1 range bookmarks migrate to their first frame. Preserve their identity and name.
+        parsed.append({id, o.value("name").toString(), color, start});
     }
     beginResetModel();
     m_items = parsed;

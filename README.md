@@ -14,9 +14,9 @@ Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline i
 - Automatic D3D11 hardware decoding for supported 1080p+ footage, with CPU/GPU preferences.
 - Timeline scrubbing and relative right-mouse scrubbing with audio snippets.
 - In/out ranges, looping, ping-pong, and playback speeds.
-- Editable Start, End, and Current frame fields using 1-based frame numbers.
-- Frame/range bookmarks in a frame-number rail, delete, and bookmark navigation.
-- Compact text menus, a collapsed bookmark rail by default, and themed Windows title bars.
+- One-row Current frame, Start, and End inputs using 1-based frame numbers.
+- Frame bookmarks on the timeline, name tooltips, and right-click rename, frame change, or delete.
+- Bookmark navigation, compact text menus, and themed Windows title bars.
 - Versioned `.tfv` project save/load, relative media paths, identity checks, and relinking.
 - Review settings: range, frame, speed, audio offset, pan, zoom, rotation, and flips.
 - Autosave recovery files beside saved projects and unsaved-change prompts.

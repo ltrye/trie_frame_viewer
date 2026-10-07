@@ -4,7 +4,9 @@ import Trie.FrameViewer
 
 Item {
     id: timeline
+    objectName: "timeline"
     required property var player
+    readonly property bool editingBookmark: bookmarkEditor.visible
     implicitHeight: Theme.timelineHeight
     readonly property real trackLeft: Theme.spaceLg
     readonly property real trackWidth: Math.max(1, width - Theme.spaceLg * 2)
@@ -48,22 +50,6 @@ Item {
             height: 2
             color: Theme.accent
             opacity: 0.55
-        }
-    }
-    Repeater {
-        model: player.bookmarks
-        Rectangle {
-            required property int startFrame
-            required property int endFrame
-            required property bool isRange
-            required property string bookmarkColor
-            x: timeline.xFor(startFrame) - (isRange ? 0 : 3)
-            y: Theme.spaceLg - Theme.spaceXs
-            width: isRange ? Math.max(5, timeline.xFor(endFrame) - x) : 6
-            height: isRange ? 4 : 9
-            radius: 2
-            color: bookmarkColor
-            opacity: 0.85
         }
     }
     MouseArea {
@@ -123,6 +109,121 @@ Item {
             height: 7
             radius: 2
             color: Theme.ink
+        }
+    }
+    Repeater {
+        model: player.bookmarks
+        Item {
+            id: marker
+            required property string bookmarkId
+            required property string bookmarkName
+            required property int bookmarkFrame
+            required property string bookmarkColor
+            objectName: "bookmarkMarker_" + bookmarkId
+            x: timeline.xFor(bookmarkFrame) - width / 2
+            y: Theme.spaceLg - Theme.spaceXs - (height - Theme.bookmarkMarkerHeight) / 2
+            width: Theme.bookmarkHitWidth
+            height: Theme.bookmarkHitHeight
+            z: 2
+            Accessible.role: Accessible.Button
+            Accessible.name: bookmarkName
+            Accessible.onPressAction: player.activateBookmark(bookmarkId)
+            Rectangle {
+                anchors.centerIn: parent
+                width: Theme.bookmarkMarkerWidth
+                height: Theme.bookmarkMarkerHeight
+                radius: 2
+                color: marker.bookmarkColor
+                opacity: pointer.containsMouse ? 1 : 0.85
+            }
+            MouseArea {
+                id: pointer
+                anchors.fill: parent
+                enabled: player.loaded
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                cursorShape: Qt.PointingHandCursor
+                property bool scrubbing: false
+                onPressed: mouse => {
+                    if (mouse.button === Qt.RightButton) {
+                        const point = mapToItem(timeline, mouse.x, mouse.y);
+                        bookmarkMenu.show(marker.bookmarkId, marker.bookmarkName, marker.bookmarkFrame, point);
+                    } else {
+                        scrubbing = true;
+                        player.seek(marker.bookmarkFrame, true);
+                    }
+                }
+                onPositionChanged: mouse => {
+                    if (scrubbing) {
+                        const point = mapToItem(timeline, mouse.x, mouse.y);
+                        player.seek(timeline.frameFor(point.x), true);
+                    }
+                }
+                onReleased: {
+                    if (scrubbing)
+                        player.finishScrub();
+                    scrubbing = false;
+                }
+                onCanceled: {
+                    if (scrubbing)
+                        player.finishScrub();
+                    scrubbing = false;
+                }
+            }
+            ToolTip.visible: pointer.containsMouse && !pointer.pressed && !bookmarkMenu.visible && !bookmarkEditor.visible
+            ToolTip.text: bookmarkName
+            ToolTip.delay: Theme.tooltipDelay
+        }
+    }
+    Menu {
+        id: bookmarkMenu
+        objectName: "bookmarkContextMenu"
+        property string bookmarkId: ""
+        property string bookmarkName: ""
+        property int bookmarkFrame: 0
+        popupType: Popup.Item
+        implicitWidth: Theme.menuWidth
+        padding: Theme.spaceXs
+        font.family: Theme.font
+        font.pixelSize: Theme.menuTextSize
+        function show(id, name, frame, point) {
+            bookmarkId = id;
+            bookmarkName = name;
+            bookmarkFrame = frame;
+            popup(point.x, point.y);
+        }
+        background: Rectangle {
+            color: Theme.surface
+            radius: Theme.radiusSm
+            border.color: Theme.border
+        }
+        MenuItem {
+            objectName: "bookmarkRenameAction"
+            text: qsTr("Rename…")
+            onTriggered: bookmarkEditor.edit(bookmarkMenu.bookmarkId, bookmarkMenu.bookmarkName, bookmarkMenu.bookmarkFrame, false)
+        }
+        MenuItem {
+            objectName: "bookmarkFrameAction"
+            text: qsTr("Change frame…")
+            onTriggered: bookmarkEditor.edit(bookmarkMenu.bookmarkId, bookmarkMenu.bookmarkName, bookmarkMenu.bookmarkFrame, true)
+        }
+        MenuSeparator {}
+        MenuItem {
+            objectName: "bookmarkDeleteAction"
+            text: qsTr("Delete bookmark")
+            onTriggered: player.bookmarks.remove(bookmarkMenu.bookmarkId)
+        }
+    }
+    BookmarkEditor {
+        id: bookmarkEditor
+        parent: Overlay.overlay
+        player: timeline.player
+    }
+    Connections {
+        target: player
+        function onMediaChanged() {
+            if (!player.loaded)
+                bookmarkMenu.close();
         }
     }
 }

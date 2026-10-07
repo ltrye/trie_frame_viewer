@@ -22,7 +22,7 @@ the viewer center; zoom is a multiplier of fit-to-window.
   },
   "bookmarks": [
     {"id": "unique-id", "type": "frame", "name": "Contact", "color": "#e6bf79", "start": 24, "endInclusive": 24},
-    {"id": "another-id", "type": "range", "name": "Cycle", "color": "#a8d5c2", "start": 4, "endInclusive": 36}
+    {"id": "another-id", "type": "frame", "name": "Passing", "color": "#a8d5c2", "start": 4, "endInclusive": 4}
   ]
 }
 ```
@@ -30,6 +30,12 @@ the viewer center; zoom is a multiplier of fit-to-window.
 `loop` accepts `once`, `loop`, or `pingpong`. A positive audio offset delays audio
 relative to video. Frame-bookmark endpoints must be equal. Bookmark IDs must be
 nonempty and unique and endpoints must be inside the loaded source.
+
+Only single-frame bookmarks are created and saved. The version 1 wire format keeps
+equal `start`/`endInclusive` fields for compatibility. Older `type: "range"` bookmarks
+are validated and loaded as a bookmark at their start frame, retaining the ID, name,
+and color. They save as `type: "frame"` on the next save. Playback range settings are
+independent of bookmarks and remain supported.
 
 Projects larger than 4 MiB and unknown schema versions are rejected. Media identity
 uses size plus a SHA-256 of the first/last 64 KiB; this detects many replacement

@@ -30,9 +30,11 @@ dependency. The two singleton modules contain appearance and icon data only.
 
 AppMenuBar groups commands and resolves labels/shortcuts from defaults.json via
 Preferences. Main routes menu requests through the same dispatcher as keyboard
-shortcuts. BookmarkPanel has a collapsed property, while Main owns the session
-layout state. Both layouts use BookmarkCard's frame-number-only presentation;
-the domain's bookmark name field remains intact for existing project files.
+shortcuts. Timeline owns frame-bookmark markers, hover tooltips, and their context
+menu. BookmarkEditor is a reusable dialog for name/frame edits. Edits address stable
+bookmark IDs so removing another marker cannot redirect a pending edit. The controller
+validates frame edits against the loaded media; names and changes remain in the domain
+model and persist in `.tfv` projects. There is no bookmark sidebar or range-bookmark action.
 
 ## Threads and ownership
 

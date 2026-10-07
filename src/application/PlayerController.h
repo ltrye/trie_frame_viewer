@@ -147,8 +147,9 @@ class PlayerController final : public QObject {
     Q_INVOKABLE void finishScrub();
     Q_INVOKABLE void setRange(int start, int end);
     Q_INVOKABLE void resetRange();
-    Q_INVOKABLE void activateBookmark(int row);
-    Q_INVOKABLE void addBookmark(bool range, const QString& color);
+    Q_INVOKABLE void activateBookmark(const QString& id);
+    Q_INVOKABLE void addBookmark(const QString& color);
+    Q_INVOKABLE bool setBookmarkFrame(const QString& id, int frame);
     Q_INVOKABLE void pan(double x, double y);
     Q_INVOKABLE void rotate(int delta);
     Q_INVOKABLE void flip(bool vertical);

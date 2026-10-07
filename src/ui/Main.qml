@@ -30,7 +30,6 @@ Controls.ApplicationWindow {
     palette.light: Theme.border
     palette.mid: Theme.border
     palette.dark: Theme.background
-    property bool bookmarksExpanded: false
     readonly property bool alwaysOnTop: (flags & Qt.WindowStaysOnTopHint) !== 0
     property string pendingAction: ""
     property url pendingUrl
@@ -60,8 +59,8 @@ Controls.ApplicationWindow {
     function tooltip(id) {
         return actionLabel(id) + " · " + preferences.shortcut(id);
     }
-    function bookmark(range) {
-        player.addBookmark(range, Theme.bookmarkColors[player.bookmarks.count % Theme.bookmarkColors.length]);
+    function bookmark() {
+        player.addBookmark(Theme.bookmarkColors[player.bookmarks.count % Theme.bookmarkColors.length]);
     }
     function guarded(action) {
         if (player.dirty) {
@@ -99,11 +98,7 @@ Controls.ApplicationWindow {
             else
                 saveDialog.open();
         } else if (action === "bookmark")
-            bookmark(false);
-        else if (action === "rangeBookmark")
-            bookmark(true);
-        else if (action === "toggleBookmarks")
-            bookmarksExpanded = !bookmarksExpanded;
+            bookmark();
         else if (action === "settings")
             settingsDialog.openTab(0);
         else if (action === "shortcuts")
@@ -143,7 +138,7 @@ Controls.ApplicationWindow {
         delegate: Shortcut {
             required property var modelData
             sequence: modelData.shortcut
-            enabled: modelData.shortcut.length > 0 && !app.textInputActive && !settingsDialog.visible && !unsaved.visible && !aboutDialog.visible
+            enabled: modelData.shortcut.length > 0 && !app.textInputActive && !bookmarkTimeline.editingBookmark && !settingsDialog.visible && !unsaved.visible && !aboutDialog.visible
             onActivated: app.dispatch(modelData.id)
         }
     }
@@ -274,7 +269,6 @@ Controls.ApplicationWindow {
             Layout.preferredHeight: Theme.menuBarHeight
             player: app.player
             preferences: app.preferences
-            bookmarksExpanded: app.bookmarksExpanded
             fullScreen: app.visibility === Window.FullScreen
             alwaysOnTop: app.alwaysOnTop
             onActionRequested: action => app.dispatch(action)
@@ -284,39 +278,26 @@ Controls.ApplicationWindow {
             height: 1
             color: Theme.border
         }
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
-            ColumnLayout {
+            Viewer {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 0
-                Viewer {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    player: app.player
-                    preferences: app.preferences
-                    onOpenRequested: app.dispatch("openMedia")
-                }
-                Timeline {
-                    Layout.fillWidth: true
-                    player: app.player
-                }
-                Transport {
-                    Layout.fillWidth: true
-                    player: app.player
-                    preferences: app.preferences
-                }
-            }
-            BookmarkPanel {
-                Layout.preferredWidth: app.bookmarksExpanded ? Theme.sidebarWidth : Theme.bookmarkRailWidth
                 Layout.fillHeight: true
                 player: app.player
                 preferences: app.preferences
-                collapsed: !app.bookmarksExpanded
-                onToggleRequested: app.dispatch("toggleBookmarks")
-                onAddRequested: range => app.bookmark(range)
+                onOpenRequested: app.dispatch("openMedia")
+            }
+            Timeline {
+                id: bookmarkTimeline
+                Layout.fillWidth: true
+                player: app.player
+            }
+            Transport {
+                Layout.fillWidth: true
+                player: app.player
+                preferences: app.preferences
             }
         }
     }

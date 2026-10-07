@@ -423,18 +423,19 @@ void PlayerController::setRange(int start, int end) {
 void PlayerController::resetRange() {
     setRange(0, m_info.frameCount - 1);
 }
-void PlayerController::activateBookmark(int row) {
-    const auto* b = m_bookmarks.at(row);
+void PlayerController::activateBookmark(const QString& id) {
+    const auto* b = m_bookmarks.find(id);
     if (!b)
         return;
     pause();
-    if (b->range)
-        setRange(b->start, b->end);
-    seek(b->start, true);
+    seek(b->frame, true);
 }
-void PlayerController::addBookmark(bool range, const QString& color) {
+void PlayerController::addBookmark(const QString& color) {
     if (m_loaded)
-        m_bookmarks.add(range ? m_in : m_frame, range ? m_out : m_frame, range, color);
+        m_bookmarks.add(m_frame, color);
+}
+bool PlayerController::setBookmarkFrame(const QString& id, int frame) {
+    return m_loaded && m_bookmarks.setFrame(id, frame, m_info.frameCount);
 }
 void PlayerController::setZoom(double value) {
     if (!std::isfinite(value))

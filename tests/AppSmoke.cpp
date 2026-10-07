@@ -11,11 +11,153 @@
 #include <QTimer>
 #include <QtTest/QTest>
 
-static void clickItem(QQuickWindow& window, QQuickItem* item) {
+static QQuickItem* visualItem(QQuickItem* parent, const QString& name) {
+    if (parent->objectName() == name)
+        return parent;
+    for (auto* child : parent->childItems())
+        if (auto* found = visualItem(child, name))
+            return found;
+    return nullptr;
+}
+
+static bool visibleText(QQuickItem* parent, const QString& text) {
+    if (parent->isVisible() && parent->property("text").toString() == text)
+        return true;
+    for (auto* child : parent->childItems())
+        if (visibleText(child, text))
+            return true;
+    return false;
+}
+
+static void clickItem(QQuickWindow& window, QQuickItem* item, Qt::MouseButton button = Qt::LeftButton) {
     if (!item)
         return;
     const QPointF point = item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
-    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
+    QTest::mouseClick(&window, button, Qt::NoModifier, point.toPoint());
+}
+
+static void typeText(QQuickWindow& window, QQuickItem* field, const QString& text) {
+    field->forceActiveFocus();
+    QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
+    for (auto character : text)
+        QTest::keyClick(&window, character.toLatin1());
+}
+
+static bool bookmarkUiSmoke(QQuickWindow& window, tfv::PlayerController& player, const QString& directory) {
+    const auto log = [&](const QString& message) {
+        QFile file(directory + "/bookmark-ui.log");
+        file.open(QIODevice::WriteOnly | QIODevice::Append);
+        file.write(message.toUtf8() + '\n');
+    };
+    auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
+    log(QString("Bookmark UI: model=%1 count=%2").arg(model != nullptr).arg(model ? model->rowCount() : -1));
+    if (!model || model->rowCount() != 2)
+        return false;
+    const QString id = model->at(0)->id;
+    const auto markerFor = [&](const QString& bookmarkId) {
+        // Repeater delegates belong to the visual tree, independently of QObject ownership.
+        return visualItem(window.contentItem(), "bookmarkMarker_" + bookmarkId);
+    };
+    const auto menuAction = [&](const QString& bookmarkId, const char* action) {
+        window.grabWindow();
+        auto* marker = markerFor(bookmarkId);
+        if (!marker) {
+            log("Marker missing: " + bookmarkId);
+            qWarning() << "Bookmark UI: marker missing" << bookmarkId;
+            return false;
+        }
+        const int before = player.currentFrame();
+        clickItem(window, marker, Qt::RightButton);
+        QTest::qWait(150);
+        auto* menu = window.findChild<QObject*>("bookmarkContextMenu");
+        if (!menu || !menu->property("visible").toBool() || player.currentFrame() != before) {
+            log(QString("Context menu failed: visible=%1 before=%2 after=%3")
+                    .arg(menu && menu->property("visible").toBool())
+                    .arg(before)
+                    .arg(player.currentFrame()));
+            qWarning() << "Bookmark UI: context menu did not open" << marker->mapToScene({0, 0})
+                       << (menu ? menu->property("visible") : QVariant{});
+            window.grabWindow().save(directory + "/bookmark-failure.png");
+            return false;
+        }
+        window.grabWindow();
+        auto* item = window.findChild<QQuickItem*>(action);
+        if (!item) {
+            log(QString("Action missing: %1").arg(action));
+            qWarning() << "Bookmark UI: menu action missing" << action;
+            return false;
+        }
+        clickItem(window, item);
+        QTest::qWait(180);
+        log(QString("Clicked action: %1").arg(action));
+        return true;
+    };
+    if (!menuAction(id, "bookmarkRenameAction"))
+        return false;
+    auto* editor = window.findChild<QObject*>("bookmarkEditor");
+    auto* input = window.findChild<QQuickItem*>("bookmarkEditorInput");
+    if (!editor || !input || !editor->property("visible").toBool()) {
+        log("Editor did not open");
+        qWarning() << "Bookmark UI: editor did not open";
+        window.grabWindow().save(directory + "/bookmark-failure.png");
+        return false;
+    }
+    typeText(window, input, "contact pose");
+    QTest::keyClick(&window, Qt::Key_Return);
+    QTest::qWait(150);
+    if (model->find(id)->name != "contact pose" || !player.dirty()) {
+        log("Rename did not commit: " + model->find(id)->name);
+        qWarning() << "Bookmark UI: rename did not commit" << input->property("text")
+                   << model->find(id)->name;
+        window.grabWindow().save(directory + "/bookmark-failure.png");
+        return false;
+    }
+    // Hover uses the actual marker hit area, and the name must follow a rename.
+    auto* marker = markerFor(id);
+    if (!marker)
+        return false;
+    QTest::mouseMove(&window, marker->mapToScene({marker->width() / 2, marker->height() / 2}).toPoint());
+    QTest::qWait(750);
+    const bool tooltip = visibleText(window.contentItem(), "contact pose");
+    if (!tooltip || !window.grabWindow().save(directory + "/bookmark-tooltip.png")) {
+        qWarning() << "Bookmark UI: tooltip not found";
+        window.grabWindow().save(directory + "/bookmark-failure.png");
+        return false;
+    }
+    const qreal oldX = marker->x();
+    if (!menuAction(id, "bookmarkFrameAction"))
+        return false;
+    typeText(window, input, "0");
+    QTest::keyClick(&window, Qt::Key_Return);
+    if (!editor->property("visible").toBool() || model->find(id)->frame != 24)
+        return false;
+    typeText(window, input, "41");
+    if (!window.grabWindow().save(directory + "/bookmark-edit.png"))
+        return false;
+    QTest::keyClick(&window, Qt::Key_Return);
+    QTest::qWait(150);
+    marker = markerFor(id);
+    if (!marker || model->find(id)->frame != 40 || marker->x() <= oldX)
+        return false;
+    clickItem(window, marker);
+    if (player.currentFrame() != 40)
+        return false;
+    // Delete a temporary bookmark through the context menu, preserving the two saved markers.
+    player.seek(60);
+    player.addBookmark("#aebbe8");
+    const QString temporaryId = model->at(2)->id;
+    QCoreApplication::processEvents();
+    if (!menuAction(temporaryId, "bookmarkDeleteAction"))
+        return false;
+    return model->rowCount() == 2 && !model->find(temporaryId) && !markerFor(temporaryId);
+}
+
+static bool frameFieldsOnOneRow(QQuickWindow& window) {
+    const auto* current = window.findChild<QQuickItem*>("currentFrameField");
+    const auto* start = window.findChild<QQuickItem*>("playbackStartField");
+    const auto* end = window.findChild<QQuickItem*>("playbackEndField");
+    return current && start && end && current->x() < start->x() && start->x() < end->x() &&
+           qAbs(current->y() - start->y()) < 0.5 && qAbs(start->y() - end->y()) < 0.5;
 }
 
 static bool editFrameFields(QQuickWindow& window, tfv::PlayerController& player) {
@@ -100,47 +242,25 @@ static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Prefe
                           std::shared_ptr<bool> valid) {
     window.resize(1160, 800);
     preferences.setTheme("dark");
-    // A resize must finish its layout pass before pointer coordinates are sampled.
-    QTimer::singleShot(120, &app,
-                       [&] { clickItem(window, window.findChild<QQuickItem*>("bookmarkToggle")); });
     QTimer::singleShot(300, &app, [&, directory, report, valid] {
-        // Hidden diagnostic windows may defer layout until a frame is requested.
-        const QImage expandedImage = window.grabWindow();
-        auto* panel = window.findChild<QQuickItem*>("bookmarkPanel");
-        const bool expanded =
-            panel && !panel->property("collapsed").toBool() && qAbs(panel->width() - 220) < 0.5;
-        (*report)["bookmarkButtonExpands"] = expanded;
-        *valid = expanded && centeredButtons(window) && *valid;
-        *valid = expandedImage.save(directory + "/review-expanded.png") && *valid;
-        clickItem(window, window.findChild<QQuickItem*>("menuTitle_Bookmark"));
+        *valid = window.grabWindow().save(directory + "/review-final.png") && *valid;
+        clickItem(window, window.findChild<QQuickItem*>("menuTitle_File"));
         QTimer::singleShot(120, &app, [&, directory, report, valid] {
-            clickItem(window, window.findChild<QQuickItem*>("menu_toggleBookmarks"));
-            QTimer::singleShot(120, &app, [&, directory, report, valid] {
-                *valid = window.grabWindow().save(directory + "/review-collapsed.png") && *valid;
-                auto* panel = window.findChild<QQuickItem*>("bookmarkPanel");
-                const bool collapsed =
-                    panel && panel->property("collapsed").toBool() && qAbs(panel->width() - 72) < 0.5;
-                (*report)["bookmarkMenuCollapses"] = collapsed;
-                *valid = collapsed && *valid;
-                clickItem(window, window.findChild<QQuickItem*>("menuTitle_File"));
-                QTimer::singleShot(120, &app, [&, directory, report, valid] {
-                    QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
-                    auto* fileMenu = menus.isValid() && menus.count() ? menus.at(0) : nullptr;
-                    const bool menuOpened = fileMenu && fileMenu->property("opened").toBool();
-                    (*report)["fileMenuOpens"] = menuOpened;
-                    *valid = menuOpened && *valid;
-                    *valid = window.grabWindow().save(directory + "/review-menu.png") && *valid;
-                    if (fileMenu)
-                        QMetaObject::invokeMethod(fileMenu, "close");
-                    QMetaObject::invokeMethod(&window, "dispatch", Q_ARG(QVariant, QVariant("settings")));
-                    QTimer::singleShot(200, &app, [&, directory, report, valid] {
-                        *valid = window.grabWindow().save(directory + "/preferences.png") && *valid;
-                        QFile output(directory + "/smoke-report.json");
-                        output.open(QIODevice::WriteOnly);
-                        output.write(QJsonDocument(*report).toJson());
-                        QCoreApplication::exit(*valid ? 0 : 4);
-                    });
-                });
+            QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
+            auto* fileMenu = menus.isValid() && menus.count() ? menus.at(0) : nullptr;
+            const bool menuOpened = fileMenu && fileMenu->property("opened").toBool();
+            (*report)["fileMenuOpens"] = menuOpened;
+            *valid = menuOpened && *valid;
+            *valid = window.grabWindow().save(directory + "/review-menu.png") && *valid;
+            if (fileMenu)
+                QMetaObject::invokeMethod(fileMenu, "close");
+            QMetaObject::invokeMethod(&window, "dispatch", Q_ARG(QVariant, QVariant("settings")));
+            QTimer::singleShot(200, &app, [&, directory, report, valid] {
+                *valid = window.grabWindow().save(directory + "/preferences.png") && *valid;
+                QFile output(directory + "/smoke-report.json");
+                output.open(QIODevice::WriteOnly);
+                output.write(QJsonDocument(*report).toJson());
+                QCoreApplication::exit(*valid ? 0 : 4);
             });
         });
     });
@@ -204,9 +324,14 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         *done = true;
         const bool frameFieldsValid = editFrameFields(window, player);
         player.seek(24);
-        player.addBookmark(false, "#e6bf79");
+        player.addBookmark("#e6bf79");
+        player.seek(4);
+        player.addBookmark("#a8d5c2");
+        const bool bookmarksValid = bookmarkUiSmoke(window, player, directory);
         player.setRange(4, 36);
-        player.addBookmark(true, "#a8d5c2");
+        player.seek(24);
+        if (auto* field = window.findChild<QQuickItem*>("playbackEndField"))
+            field->forceActiveFocus();
         player.rotate(90);
         player.flip(false);
         const QString path = directory + "/review.tfv";
@@ -215,10 +340,12 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
             return;
         }
         player.openProject(QUrl::fromLocalFile(path));
-        QTimer::singleShot(1500, &app, [&, directory, frameFieldsValid] {
-            auto* panel = window.findChild<QQuickItem*>("bookmarkPanel");
+        QTimer::singleShot(1500, &app, [&, directory, frameFieldsValid, bookmarksValid] {
             QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
-            const bool railDefault = panel && panel->property("collapsed").toBool() && panel->width() == 72;
+            const bool noSidebar = !window.findChild<QQuickItem*>("bookmarkPanel");
+            auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
+            const bool bookmarksRestored = model && model->rowCount() == 2 &&
+                                           model->at(0)->name == "contact pose" && model->at(0)->frame == 40;
             const auto fieldValue = [&](const char* name) {
                 auto* field = window.findChild<QQuickItem*>(name);
                 return field ? field->property("text").toString() : QString{};
@@ -236,7 +363,10 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                 {"error", player.error()},
                 {"cacheMiB", player.cacheUsedMiB()},
                 {"audioAvailable", player.audioAvailable()},
-                {"bookmarkRailDefault", railDefault},
+                {"bookmarkSidebarRemoved", noSidebar},
+                {"bookmarkTooltipAndContextEditing", bookmarksValid},
+                {"bookmarkEditsRestoreWithProject", bookmarksRestored},
+                {"frameFieldsOnOneRow", frameFieldsOnOneRow(window)},
                 {"buttonsCentered", centeredButtons(window)},
                 {"frameFieldsEditAndSync", frameFieldsValid},
                 {"frameFieldsRestoreWithProject", fieldsRestored},
@@ -248,7 +378,8 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
             auto valid = std::make_shared<bool>(
                 player.loaded() && player.currentFrame() == 24 &&
                 player.bookmarks()->property("count").toInt() == 2 && player.rotation() == 90 &&
-                player.flipH() && !player.dirty() && player.error().isEmpty() && railDefault &&
+                player.flipH() && !player.dirty() && player.error().isEmpty() && noSidebar &&
+                bookmarksValid && bookmarksRestored && frameFieldsOnOneRow(window) &&
                 centeredButtons(window) && frameFieldsValid && fieldsRestored && menus.count() == 8 &&
                 nativeCaptionMatches(window, true));
             *valid = window.grabWindow().save(directory + "/review-dark.png") && *valid;

@@ -10,7 +10,7 @@ Item {
     required property var preferences
     implicitHeight: Theme.playbackBarHeight
     readonly property bool compact: width < frameFields.implicitWidth * 2 + playbackControls.implicitWidth + Theme.spaceLg * 2 + Theme.spaceMd * 2
-    ColumnLayout {
+    RowLayout {
         id: frameFields
         objectName: "playbackFrameFields"
         anchors {
@@ -18,64 +18,52 @@ Item {
             verticalCenter: parent.verticalCenter
             leftMargin: Theme.spaceLg
         }
-        spacing: Theme.spaceXs
-        RowLayout {
-            spacing: Theme.spaceSm
-            Text {
-                text: qsTr("Start")
-                color: Theme.secondary
-                font.family: Theme.font
-                font.pixelSize: Theme.textBody
-            }
-            FrameInput {
-                objectName: "playbackStartField"
-                label: qsTr("Start frame")
-                enabled: player.loaded
-                frameNumber: player.rangeStart + 1
-                maximumFrame: Math.max(1, player.rangeEnd + 1)
-                onFrameSubmitted: frame => player.setRange(frame - 1, player.rangeEnd)
-            }
-            Text {
-                text: "|"
-                color: Theme.muted
-                font.family: Theme.font
-                font.pixelSize: Theme.textBody
-            }
-            Text {
-                text: qsTr("End")
-                color: Theme.secondary
-                font.family: Theme.font
-                font.pixelSize: Theme.textBody
-            }
-            FrameInput {
-                objectName: "playbackEndField"
-                label: qsTr("End frame")
-                enabled: player.loaded
-                frameNumber: player.rangeEnd + 1
-                minimumFrame: player.rangeStart + 1
-                maximumFrame: Math.max(1, player.frameCount)
-                onFrameSubmitted: frame => player.setRange(player.rangeStart, frame - 1)
+        spacing: Theme.spaceSm
+        FrameInput {
+            objectName: "currentFrameField"
+            label: qsTr("Current frame")
+            enabled: player.loaded
+            frameNumber: player.currentFrame + 1
+            maximumFrame: Math.max(1, player.frameCount)
+            onFrameSubmitted: frame => {
+                player.execute("pause");
+                player.seek(frame - 1);
             }
         }
-        RowLayout {
-            spacing: Theme.spaceSm
-            Text {
-                text: qsTr("Current frame")
-                color: Theme.secondary
-                font.family: Theme.font
-                font.pixelSize: Theme.textBody
-            }
-            FrameInput {
-                objectName: "currentFrameField"
-                label: qsTr("Current frame")
-                enabled: player.loaded
-                frameNumber: player.currentFrame + 1
-                maximumFrame: Math.max(1, player.frameCount)
-                onFrameSubmitted: frame => {
-                    player.execute("pause");
-                    player.seek(frame - 1);
-                }
-            }
+        Text {
+            text: qsTr("Start")
+            color: Theme.secondary
+            font.family: Theme.font
+            font.pixelSize: Theme.textBody
+        }
+        FrameInput {
+            objectName: "playbackStartField"
+            label: qsTr("Start frame")
+            enabled: player.loaded
+            frameNumber: player.rangeStart + 1
+            maximumFrame: Math.max(1, player.rangeEnd + 1)
+            onFrameSubmitted: frame => player.setRange(frame - 1, player.rangeEnd)
+        }
+        Text {
+            text: "|"
+            color: Theme.muted
+            font.family: Theme.font
+            font.pixelSize: Theme.textBody
+        }
+        Text {
+            text: qsTr("End")
+            color: Theme.secondary
+            font.family: Theme.font
+            font.pixelSize: Theme.textBody
+        }
+        FrameInput {
+            objectName: "playbackEndField"
+            label: qsTr("End frame")
+            enabled: player.loaded
+            frameNumber: player.rangeEnd + 1
+            minimumFrame: player.rangeStart + 1
+            maximumFrame: Math.max(1, player.frameCount)
+            onFrameSubmitted: frame => player.setRange(player.rangeStart, frame - 1)
         }
     }
     RowLayout {

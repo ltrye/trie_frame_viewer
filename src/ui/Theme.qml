@@ -37,16 +37,19 @@ QtObject {
     readonly property int controlHeight: 34
     readonly property int iconSize: 18
     readonly property int toolbarHeight: 62
-    readonly property int playbackBarHeight: 76
+    readonly property int playbackBarHeight: 50
     readonly property int frameFieldHeight: 26
     readonly property int frameFieldMinWidth: 70
     readonly property int menuBarHeight: 24
     readonly property int menuItemHeight: 30
     readonly property int menuTextSize: 12
     readonly property int menuWidth: 244
-    readonly property int bookmarkRailWidth: 72
-    readonly property int sidebarWidth: 220
-    readonly property int bookmarkRowHeight: 38
+    readonly property int bookmarkMarkerWidth: 6
+    readonly property int bookmarkMarkerHeight: 10
+    readonly property int bookmarkHitWidth: 16
+    readonly property int bookmarkHitHeight: 20
+    readonly property int bookmarkEditorWidth: 340
+    readonly property int tooltipDelay: 550
     readonly property int timelineHeight: 56
     readonly property int transitionMs: 110
     readonly property int defaultWidth: 1160

@@ -9,7 +9,6 @@ Controls.MenuBar {
     objectName: "appMenuBar"
     required property var player
     required property var preferences
-    required property bool bookmarksExpanded
     required property bool fullScreen
     required property bool alwaysOnTop
     signal actionRequested(string action)
@@ -248,10 +247,6 @@ Controls.MenuBar {
             actionId: "bookmark"
             enabled: player.loaded
         }
-        Command {
-            actionId: "rangeBookmark"
-            enabled: player.loaded
-        }
         Controls.MenuSeparator {}
         Command {
             actionId: "previousBookmark"
@@ -260,12 +255,6 @@ Controls.MenuBar {
         Command {
             actionId: "nextBookmark"
             enabled: player.bookmarks.count > 0
-        }
-        Controls.MenuSeparator {}
-        Command {
-            actionId: "toggleBookmarks"
-            checkable: true
-            checked: menuBar.bookmarksExpanded
         }
     }
     ReviewMenu {
