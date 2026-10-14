@@ -37,6 +37,9 @@ Controls.ApplicationWindow {
     property url pendingUrl
     property bool allowClose: false
     property bool savingForContinuation: false
+    property bool cinemaMode: false
+    property int cinemaRestoreVisibility: Window.Windowed
+    property bool changingCinemaVisibility: false
     readonly property bool textInputActive: activeFocusItem !== null && typeof activeFocusItem.selectAll === "function"
     Binding {
         target: Theme
@@ -63,6 +66,37 @@ Controls.ApplicationWindow {
     }
     function bookmark() {
         player.addBookmark(Theme.bookmarkColors[player.bookmarks.count % Theme.bookmarkColors.length]);
+    }
+    function setCinemaMode(enabled) {
+        if (cinemaMode === enabled || (enabled && !player.loaded))
+            return;
+        changingCinemaVisibility = true;
+        if (enabled) {
+            cinemaRestoreVisibility = visibility;
+            cinemaMode = true;
+            reviewStage.forceActiveFocus();
+            visibility = Window.FullScreen;
+        } else {
+            cinemaMode = false;
+            // Leave fullscreen fully before applying a maximized restore.
+            visibility = cinemaRestoreVisibility === Window.Maximized ? Window.Windowed : cinemaRestoreVisibility;
+        }
+        finishCinemaTransition.restart();
+    }
+    Timer {
+        id: finishCinemaTransition
+        interval: 0
+        onTriggered: {
+            // Windows can report a restored normal state while leaving fullscreen.
+            // Reapply maximized after that native transition has completed.
+            if (!app.cinemaMode && app.cinemaRestoreVisibility === Window.Maximized)
+                app.showMaximized();
+            app.changingCinemaVisibility = false;
+        }
+    }
+    onVisibilityChanged: {
+        if (!changingCinemaVisibility && cinemaMode && visibility !== Window.FullScreen && visibility !== Window.Minimized)
+            cinemaMode = false;
     }
     function guarded(action) {
         if (player.dirty) {
@@ -123,9 +157,16 @@ Controls.ApplicationWindow {
             const wasVisible = app.visible;
             app.flags = alwaysOnTop ? app.flags & ~Qt.WindowStaysOnTopHint : app.flags | Qt.WindowStaysOnTopHint;
             app.visible = wasVisible;
-        } else if (action === "fullscreen")
-            visibility = visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen;
-        else
+        } else if (action === "cinemaMode")
+            setCinemaMode(!cinemaMode);
+        else if (action === "exitCinemaMode")
+            setCinemaMode(false);
+        else if (action === "fullscreen") {
+            if (cinemaMode)
+                setCinemaMode(false);
+            else
+                visibility = visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen;
+        } else
             player.execute(action);
     }
     onClosing: close => {
@@ -140,7 +181,8 @@ Controls.ApplicationWindow {
         delegate: Shortcut {
             required property var modelData
             sequence: modelData.shortcut
-            enabled: modelData.shortcut.length > 0 && !app.textInputActive && !bookmarkTimeline.editingBookmark && !settingsDialog.visible && !unsaved.visible && !aboutDialog.visible
+            autoRepeat: modelData.id !== "cinemaMode" && modelData.id !== "exitCinemaMode"
+            enabled: modelData.shortcut.length > 0 && (modelData.id === "cinemaMode" || !app.textInputActive) && !reviewStage.editingBookmark && !settingsDialog.visible && !unsaved.visible && !aboutDialog.visible && (modelData.id !== "exitCinemaMode" || (app.cinemaMode && !reviewStage.popupOpen))
             onActivated: app.dispatch(modelData.id)
         }
     }
@@ -187,6 +229,10 @@ Controls.ApplicationWindow {
     }
     Connections {
         target: player
+        function onMediaChanged() {
+            if (!player.loaded && app.cinemaMode)
+                app.setCinemaMode(false);
+        }
         function onRelinkRequired(missingPath) {
             relinkPrompt.text = qsTr("Locate the original footage to restore this project:\n") + missingPath;
             relinkPrompt.open();
@@ -285,35 +331,25 @@ Controls.ApplicationWindow {
             preferences: app.preferences
             fullScreen: app.visibility === Window.FullScreen
             alwaysOnTop: app.alwaysOnTop
+            cinemaMode: app.cinemaMode
+            visible: !app.cinemaMode
             onActionRequested: action => app.dispatch(action)
         }
         Rectangle {
             Layout.fillWidth: true
             height: 1
             color: Theme.border
+            visible: !app.cinemaMode
         }
-        ColumnLayout {
+        ReviewStage {
+            id: reviewStage
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
-            Viewer {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                player: app.player
-                preferences: app.preferences
-                resourceMonitor: app.resourceMonitor
-                onOpenRequested: app.dispatch("openMedia")
-            }
-            Timeline {
-                id: bookmarkTimeline
-                Layout.fillWidth: true
-                player: app.player
-            }
-            Transport {
-                Layout.fillWidth: true
-                player: app.player
-                preferences: app.preferences
-            }
+            player: app.player
+            preferences: app.preferences
+            resourceMonitor: app.resourceMonitor
+            cinemaMode: app.cinemaMode
+            onOpenRequested: app.dispatch("openMedia")
         }
     }
     Rectangle {
@@ -327,7 +363,7 @@ Controls.ApplicationWindow {
         height: errorText.implicitHeight + Theme.spaceLg * 2
         radius: Theme.radiusMd
         color: Theme.warningSurface
-        visible: player.error.length > 0
+        visible: player.error.length > 0 && !app.cinemaMode
         z: 20
         Text {
             id: errorText

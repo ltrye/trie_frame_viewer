@@ -15,6 +15,23 @@ Preferences::Preferences(QObject* parent) : QObject(parent) {
     if (!file.open(QIODevice::ReadOnly))
         qFatal("Missing defaults.json resource");
     m_defaults = QJsonDocument::fromJson(file.readAll()).object();
+    if (!m_settings.value("migrations/cinemaModeShortcut", false).toBool()) {
+        QString cinemaDefault;
+        for (const auto& entry : m_defaults.value("actions").toArray()) {
+            const auto action = entry.toObject();
+            if (action.value("id").toString() == "cinemaMode")
+                cinemaDefault = action.value("shortcut").toString();
+        }
+        if (!cinemaDefault.isEmpty() && !m_settings.contains("shortcuts/cinemaMode") &&
+            m_settings.value("shortcuts/fullscreen")
+                    .toString()
+                    .trimmed()
+                    .compare(cinemaDefault, Qt::CaseInsensitive) == 0) {
+            m_settings.remove("shortcuts/fullscreen");
+            m_settings.setValue("shortcuts/cinemaMode", cinemaDefault);
+        }
+        m_settings.setValue("migrations/cinemaModeShortcut", true);
+    }
 }
 int Preferences::integer(const QString& key) const {
     return m_defaults.value(key).toInt();

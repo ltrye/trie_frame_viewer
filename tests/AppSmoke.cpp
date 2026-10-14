@@ -383,6 +383,150 @@ static bool debugUiSmoke(QQuickWindow& window, tfv::Preferences& preferences, co
     return valid;
 }
 
+static bool cinemaUiSmoke(QQuickWindow& window, tfv::PlayerController& player, tfv::Preferences& preferences,
+                          const QString& directory, QJsonObject& report) {
+    auto* stage = visualItem(window.contentItem(), "reviewStage");
+    auto* viewer = visualItem(window.contentItem(), "mediaViewer");
+    auto* panel = visualItem(window.contentItem(), "playbackPanel");
+    auto* surface = visualItem(window.contentItem(), "videoSurface");
+    auto* menuBar = window.findChild<QQuickItem*>("appMenuBar");
+    auto* command = window.findChild<QQuickItem*>("menu_cinemaMode");
+    auto* loopMenu = window.findChild<QObject*>("playbackLoopMenu");
+    auto* play = window.findChild<QQuickItem*>("togglePlaybackButton");
+    if (!stage || !viewer || !panel || !surface || !menuBar || !command || !loopMenu || !play)
+        return false;
+    const QRect originalGeometry = window.geometry();
+    const auto originalVisibility = window.visibility();
+    const double originalSpeed = player.speed();
+    QStringList visibilityTrace;
+    const auto visibilityConnection =
+        QObject::connect(&window, &QWindow::visibilityChanged, &window, [&](QWindow::Visibility visibility) {
+            visibilityTrace.append(QString("%1 cinema=%2 restore=%3 changing=%4")
+                                       .arg(int(visibility))
+                                       .arg(window.property("cinemaMode").toBool())
+                                       .arg(window.property("cinemaRestoreVisibility").toInt())
+                                       .arg(window.property("changingCinemaVisibility").toBool()));
+        });
+    const int idleWait = preferences.cinemaControlsTimeoutMs() + 300;
+    const auto cinema = [&] { return window.property("cinemaMode").toBool(); };
+    const auto controls = [&] { return stage->property("controlsVisible").toBool(); };
+    const auto videoBounds = [&] { return QRectF(surface->mapToScene({0, 0}), surface->size()); };
+    const auto describeBounds = [&](const QRectF& bounds) {
+        return QString("%1,%2 %3x%4")
+            .arg(bounds.x())
+            .arg(bounds.y())
+            .arg(bounds.width())
+            .arg(bounds.height());
+    };
+    const auto hiddenItem = [&](const char* name) {
+        auto* item = visualItem(window.contentItem(), name);
+        return item && !item->isVisible();
+    };
+    const auto moveOverVideo = [&](int offset) {
+        QTest::mouseMove(&window,
+                         viewer->mapToScene({viewer->width() / 2 + offset, viewer->height() / 2}).toPoint());
+    };
+    player.setSpeed(1.5);
+    player.execute("forward");
+    QSignalSpy positions(&player, &tfv::PlayerController::positionChanged);
+    clickItem(window, window.findChild<QQuickItem*>("menuTitle_Playback"));
+    QTest::qWait(120);
+    bool valid = command->isVisible() && command->property("checkable").toBool() &&
+                 !command->property("checked").toBool();
+    valid = window.grabWindow().save(directory + "/cinema-menu.png") && valid;
+    clickItem(window, command);
+    window.requestActivate();
+    QTest::qWait(300);
+    window.grabWindow();
+    const QRectF fullscreenBounds = videoBounds();
+    report["cinemaEntered"] = cinema();
+    report["cinemaBoundsBeforeReveal"] = describeBounds(fullscreenBounds);
+    valid = cinema() && window.visibility() == QWindow::FullScreen && !menuBar->isVisible() &&
+            viewer->height() == stage->height() && stage->mapToScene({0, 0}).y() == 0 &&
+            hiddenItem("viewerTools") && hiddenItem("viewerZoom") && hiddenItem("debugMemoryOverlay") &&
+            valid;
+    QTest::qWait(idleWait);
+    const bool videoOnly = cinema() && !controls() && !panel->isVisible() && player.playing() &&
+                           player.speed() == 1.5 && positions.count() > 1;
+    valid = videoOnly && window.grabWindow().save(directory + "/cinema-video-only.png") && valid;
+    moveOverVideo(17);
+    QTest::qWait(100);
+    window.grabWindow().save(directory + "/cinema-overlay.png");
+    report["cinemaRevealedOnMove"] = controls();
+    report["cinemaPanelVisibleOnMove"] = panel->isVisible();
+    report["cinemaBoundsAfterReveal"] = describeBounds(videoBounds());
+    const bool overlayShown = controls() && panel->isVisible() && videoBounds() == fullscreenBounds;
+    valid = overlayShown && window.grabWindow().save(directory + "/cinema-overlay.png") && valid;
+    QTest::mouseMove(&window, play->mapToScene({play->width() / 2, play->height() / 2}).toPoint());
+    clickItem(window, play);
+    valid = !player.playing() && valid;
+    QTest::keyClick(&window, Qt::Key_Space);
+    valid = player.playing() && valid;
+    QTest::qWait(idleWait);
+    report["cinemaVisibleWhileHovered"] = controls();
+    const bool hoverKeepsControls = controls() && videoBounds() == fullscreenBounds;
+    valid = hoverKeepsControls && valid;
+    clickItem(window, window.findChild<QQuickItem*>("playbackLoopButton"));
+    moveOverVideo(31);
+    QTest::qWait(idleWait);
+    const bool popupKeepsControls = loopMenu->property("visible").toBool() && controls();
+    QTest::keyClick(&window, Qt::Key_Escape);
+    QTest::qWait(120);
+    valid = popupKeepsControls && cinema() && !loopMenu->property("visible").toBool() && valid;
+    moveOverVideo(43);
+    QTest::qWait(idleWait);
+    valid = !controls() && videoBounds() == fullscreenBounds && valid;
+    QTest::keyClick(&window, Qt::Key_F11);
+    QTest::qWait(200);
+    const bool restored = !cinema() && window.visibility() == originalVisibility &&
+                          window.size() == originalGeometry.size() && menuBar->isVisible() && controls();
+    valid = restored && valid;
+    player.execute("pause");
+    if (auto* field = window.findChild<QQuickItem*>("currentFrameField"))
+        field->forceActiveFocus();
+    QTest::keyClick(&window, Qt::Key_F11);
+    QTest::qWait(150);
+    report["cinemaEnteredWhileFrameFieldFocused"] = cinema();
+    valid = cinema() && !player.playing() && valid;
+    QTest::keyClick(&window, Qt::Key_Escape);
+    QTest::qWait(150);
+    report["cinemaEscapeRestoredWindow"] = !cinema();
+    valid = !cinema() && !player.playing() && valid;
+    const bool checkMaximized = window.isExposed();
+    bool restoredMaximized = false;
+    if (checkMaximized) {
+        window.setVisibility(QWindow::Maximized);
+        QTest::qWait(150);
+        report["cinemaVisibilityBeforeMaximizedEntry"] = int(window.visibility());
+        QTest::keyClick(&window, Qt::Key_F11);
+        QTest::qWait(150);
+        report["cinemaEnteredFromMaximized"] = cinema();
+        report["cinemaCapturedRestoreVisibility"] = window.property("cinemaRestoreVisibility").toInt();
+        valid = cinema() && valid;
+        QTest::keyClick(&window, Qt::Key_Escape);
+        QTest::qWait(150);
+        report["cinemaVisibilityAfterMaximizedExit"] = int(window.visibility());
+        visibilityTrace.append("MAX_CHECK " + QString::number(window.visibility()));
+        report["cinemaActiveAfterMaximizedExit"] = cinema();
+        restoredMaximized = !cinema() && window.visibility() == QWindow::Maximized;
+        valid = restoredMaximized && valid;
+    }
+    window.setVisibility(originalVisibility);
+    window.setGeometry(originalGeometry);
+    player.setSpeed(originalSpeed);
+    player.seek(24);
+    QObject::disconnect(visibilityConnection);
+    report["cinemaVisibilityTrace"] = visibilityTrace.join("; ");
+    report["cinemaVideoOnlyPreservesPlayback"] = videoOnly;
+    report["cinemaOverlayDoesNotResizeVideo"] = overlayShown;
+    report["cinemaControlsStayWhileHovered"] = hoverKeepsControls;
+    report["cinemaControlsStayForPopups"] = popupKeepsControls;
+    report["cinemaRestoresWindow"] = restored;
+    report["cinemaMaximizedRestorationChecked"] = checkMaximized;
+    report["cinemaRestoresMaximizedWindow"] = checkMaximized ? QJsonValue(restoredMaximized) : QJsonValue();
+    return valid;
+}
+
 static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Preferences& preferences,
                           const QString& directory, std::shared_ptr<QJsonObject> report,
                           std::shared_ptr<bool> valid) {
@@ -390,6 +534,10 @@ static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Prefe
     preferences.setTheme("dark");
     QTimer::singleShot(300, &app, [&, directory, report, valid] {
         *valid = window.grabWindow().save(directory + "/review-final.png") && *valid;
+        auto* player = qobject_cast<tfv::PlayerController*>(window.property("player").value<QObject*>());
+        const bool cinemaValid = player && cinemaUiSmoke(window, *player, preferences, directory, *report);
+        (*report)["cinemaMode"] = cinemaValid;
+        *valid = cinemaValid && *valid;
         clickItem(window, window.findChild<QQuickItem*>("menuTitle_File"));
         QTimer::singleShot(120, &app, [&, directory, report, valid] {
             QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
@@ -471,6 +619,28 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         if (*done || !player.loaded() || player.cacheUsedMiB() < 1)
             return;
         *done = true;
+        if (qEnvironmentVariable("TFV_SMOKE_FOCUS") == "cinema-window-state") {
+            window.requestActivate();
+            window.setVisibility(QWindow::Maximized);
+            const bool exposed = QTest::qWaitForWindowExposed(&window, 3000);
+            QTest::qWait(150);
+            QMetaObject::invokeMethod(&window, "setCinemaMode", Q_ARG(QVariant, QVariant(true)));
+            QTest::qWait(200);
+            const bool entered =
+                window.property("cinemaMode").toBool() && window.visibility() == QWindow::FullScreen;
+            QMetaObject::invokeMethod(&window, "setCinemaMode", Q_ARG(QVariant, QVariant(false)));
+            QTest::qWait(400);
+            const bool restored =
+                !window.property("cinemaMode").toBool() && window.visibility() == QWindow::Maximized;
+            const QJsonObject report{
+                {"exposedWindow", exposed}, {"enteredFullscreen", entered}, {"restoredMaximized", restored}};
+            window.grabWindow().save(directory + "/cinema-restored-maximized.png");
+            QFile output(directory + "/cinema-window-state-report.json");
+            output.open(QIODevice::WriteOnly);
+            output.write(QJsonDocument(report).toJson());
+            QCoreApplication::exit(exposed && entered && restored ? 0 : 4);
+            return;
+        }
         auto* saveDialog = window.findChild<QObject*>("saveProjectDialog");
         const bool savePrepared = saveDialog && QMetaObject::invokeMethod(saveDialog, "prepareForMedia");
         const bool saveNameValid =

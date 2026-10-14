@@ -20,6 +20,7 @@ class Preferences final : public QObject {
     Q_PROPERTY(QVariantMap shortcuts READ shortcuts NOTIFY changed)
     Q_PROPERTY(QVariantList playbackSpeeds READ playbackSpeeds CONSTANT)
     Q_PROPERTY(double zoomWheelFactor READ zoomWheelFactor CONSTANT)
+    Q_PROPERTY(int cinemaControlsTimeoutMs READ cinemaControlsTimeoutMs CONSTANT)
   public:
     explicit Preferences(QObject* parent = nullptr);
     int cacheMiB() const;
@@ -38,6 +39,9 @@ class Preferences final : public QObject {
     QVariantMap shortcuts() const;
     QVariantList playbackSpeeds() const;
     double zoomWheelFactor() const;
+    int cinemaControlsTimeoutMs() const {
+        return integer("cinemaControlsTimeoutMs");
+    }
     int integer(const QString& key) const;
     void setCacheMiB(int value);
     void setVolume(double value);

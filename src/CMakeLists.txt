@@ -61,7 +61,7 @@ qt_add_qml_module(TrieFrameViewer
         ui/components/DebugOverlay.qml
         ui/components/SelectControl.qml ui/components/ValueSlider.qml ui/components/FrameInput.qml
         ui/components/Timeline.qml ui/components/BookmarkEditor.qml
-        ui/views/Viewer.qml ui/views/Transport.qml
+        ui/views/Viewer.qml ui/views/Transport.qml ui/views/ReviewStage.qml
         ui/views/SettingsDialog.qml
 )
 set_target_properties(TrieFrameViewer PROPERTIES OUTPUT_NAME "TrieFrameViewer")

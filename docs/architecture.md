@@ -47,6 +47,14 @@ the menu bar and bookmark layouts remain reusable QML components.
 their controller and preferences explicitly. There is no global QML context-property
 dependency. The two singleton modules contain appearance and icon data only.
 
+ReviewStage owns one Viewer, Timeline, and Transport in both normal and Cinema Mode.
+In normal mode the viewer ends at the playback panel. In Cinema Mode the viewer
+fills the stage and the same panel is an overlay; its visibility never changes video
+geometry. Passive pointer handlers reveal the controls without taking scrub/pan
+gestures. The idle delay lives in defaults.json, while colors/fades use Theme.qml.
+Main owns fullscreen transitions and restores the previous window visibility.
+Cinema Mode is transient UI state and never changes project dirty/playback state.
+
 AppMenuBar groups commands and resolves labels/shortcuts from defaults.json via
 Preferences. Main routes menu requests through the same dispatcher as keyboard
 shortcuts. Timeline owns frame-bookmark markers, hover tooltips, and their context

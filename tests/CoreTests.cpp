@@ -15,6 +15,26 @@
 class CoreTests : public QObject {
     Q_OBJECT
   private slots:
+    void cinemaShortcutsMigrateTheOldFullscreenDefault() {
+        const QList<QPair<QString, QString>> shortcuts{{"F11", ""}, {"F12", ""}, {"F11", "Ctrl+F11"}};
+        for (const auto& [fullscreen, cinema] : shortcuts) {
+            QTemporaryDir directory;
+            QSettings::setDefaultFormat(QSettings::IniFormat);
+            QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, directory.path());
+            QSettings saved;
+            saved.setValue("shortcuts/fullscreen", fullscreen);
+            if (!cinema.isEmpty())
+                saved.setValue("shortcuts/cinemaMode", cinema);
+            tfv::Preferences preferences;
+            const bool migrate = fullscreen == "F11" && cinema.isEmpty();
+            QCOMPARE(preferences.shortcut("cinemaMode"), cinema.isEmpty() ? QString("F11") : cinema);
+            QCOMPARE(preferences.shortcut("fullscreen"), migrate ? QString{} : fullscreen);
+            QCOMPARE(preferences.shortcut("exitCinemaMode"), QString("Esc"));
+            QCOMPARE(preferences.cinemaControlsTimeoutMs(), 2000);
+            tfv::Preferences reopened;
+            QCOMPARE(reopened.shortcut("fullscreen"), preferences.shortcut("fullscreen"));
+        }
+    }
     void debugPreferencePersistsAndMonitoringStopsWhenDisabled() {
         QTemporaryDir settings;
         QSettings::setDefaultFormat(QSettings::IniFormat);

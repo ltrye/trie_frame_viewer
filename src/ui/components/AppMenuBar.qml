@@ -11,6 +11,7 @@ Controls.MenuBar {
     required property var preferences
     required property bool fullScreen
     required property bool alwaysOnTop
+    required property bool cinemaMode
     signal actionRequested(string action)
     implicitHeight: Theme.menuBarHeight
     padding: 0
@@ -184,6 +185,13 @@ Controls.MenuBar {
             checkable: true
             checked: player.loopMode === "once"
             onTriggered: player.loopMode = "once"
+        }
+        Controls.MenuSeparator {}
+        Command {
+            actionId: "cinemaMode"
+            enabled: player.loaded
+            checkable: true
+            checked: menuBar.cinemaMode
         }
     }
     ReviewMenu {

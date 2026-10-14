@@ -8,6 +8,12 @@ Item {
     objectName: "playbackBar"
     required property var player
     required property var preferences
+    readonly property bool popupOpen: loopMenu.visible || speedControl.popup.visible
+    readonly property bool interacting: popupOpen || currentFrameInput.activeFocus || startFrameInput.activeFocus || endFrameInput.activeFocus
+    function closePopups() {
+        loopMenu.close();
+        speedControl.popup.close();
+    }
     implicitHeight: Theme.playbackBarHeight
     readonly property bool compact: width < frameFields.implicitWidth * 2 + playbackControls.implicitWidth + Theme.spaceLg * 2 + Theme.spaceMd * 2
     RowLayout {
@@ -20,6 +26,7 @@ Item {
         }
         spacing: Theme.spaceSm
         FrameInput {
+            id: currentFrameInput
             objectName: "currentFrameField"
             label: qsTr("Current frame")
             enabled: player.loaded
@@ -37,6 +44,7 @@ Item {
             font.pixelSize: Theme.textBody
         }
         FrameInput {
+            id: startFrameInput
             objectName: "playbackStartField"
             label: qsTr("Start frame")
             enabled: player.loaded
@@ -57,6 +65,7 @@ Item {
             font.pixelSize: Theme.textBody
         }
         FrameInput {
+            id: endFrameInput
             objectName: "playbackEndField"
             label: qsTr("End frame")
             enabled: player.loaded
@@ -89,6 +98,7 @@ Item {
                 onClicked: player.execute("reverse")
             }
             ToolButton {
+                objectName: "togglePlaybackButton"
                 iconName: player.playing ? "pause" : "play"
                 hint: qsTr("Play / pause · ") + preferences.shortcuts.playPause
                 primary: true
@@ -103,6 +113,7 @@ Item {
             }
         }
         ToolButton {
+            objectName: "playbackLoopButton"
             iconName: "loop"
             hint: qsTr("Playback mode")
             selected: player.loopMode !== "once"
@@ -110,6 +121,7 @@ Item {
             onClicked: loopMenu.open()
             Controls.Menu {
                 id: loopMenu
+                objectName: "playbackLoopMenu"
                 Controls.MenuItem {
                     text: qsTr("Loop range")
                     checkable: true
@@ -136,6 +148,7 @@ Item {
             }
         }
         SelectControl {
+            id: speedControl
             Layout.preferredWidth: 80
             enabled: player.loaded
             model: preferences.playbackSpeeds

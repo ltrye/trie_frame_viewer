@@ -12,6 +12,8 @@ QtObject {
     readonly property color secondary: dark ? "#a1a19d" : "#666663"
     readonly property color muted: dark ? "#70706d" : "#888883"
     readonly property color viewer: dark ? "#111111" : "#e8e8e5"
+    readonly property color cinemaBackground: "#000000"
+    readonly property color cinemaControlsSurface: Qt.rgba(background.r, background.g, background.b, 0.94)
     readonly property color titleBar: dark ? "#1e2225" : "#ededeb"
     readonly property color menuBar: dark ? "#2b2b2d" : "#ededeb"
     readonly property color accent: dark ? "#a8d5c2" : "#33735b"

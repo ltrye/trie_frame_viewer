@@ -5,17 +5,21 @@ import Trie.Media
 
 Item {
     id: viewer
+    objectName: "mediaViewer"
     required property var player
     required property var preferences
     required property var resourceMonitor
+    property bool cinemaMode: false
+    property bool hideCursor: false
     signal openRequested
     clip: true
     Rectangle {
         anchors.fill: parent
-        color: Theme.viewer
+        color: viewer.cinemaMode ? Theme.cinemaBackground : Theme.viewer
     }
+    readonly property real fitMargin: cinemaMode ? 0 : Theme.spaceLg
     readonly property bool sideways: player.rotation % 180 !== 0
-    readonly property real fitScale: Math.min((width - Theme.spaceLg * 2) / Math.max(1, sideways ? player.mediaHeight : player.mediaWidth), (height - Theme.spaceLg * 2) / Math.max(1, sideways ? player.mediaWidth : player.mediaHeight))
+    readonly property real fitScale: Math.min((width - fitMargin * 2) / Math.max(1, sideways ? player.mediaHeight : player.mediaWidth), (height - fitMargin * 2) / Math.max(1, sideways ? player.mediaWidth : player.mediaHeight))
     VideoSurface {
         objectName: "videoSurface"
         gpuCacheMiB: preferences.gpuCacheMiB
@@ -43,7 +47,7 @@ Item {
         property real originX: 0
         property real originY: 0
         property int originFrame: 0
-        cursorShape: pressedButtons & Qt.MiddleButton ? Qt.ClosedHandCursor : pressedButtons & Qt.RightButton ? Qt.SizeHorCursor : Qt.ArrowCursor
+        cursorShape: viewer.hideCursor ? Qt.BlankCursor : pressedButtons & Qt.MiddleButton ? Qt.ClosedHandCursor : pressedButtons & Qt.RightButton ? Qt.SizeHorCursor : Qt.ArrowCursor
         onPressed: mouse => {
             lastX = originX = mouse.x;
             lastY = originY = mouse.y;
@@ -73,7 +77,7 @@ Item {
     ToolButton {
         objectName: "openMediaButton"
         anchors.centerIn: parent
-        visible: !player.loaded
+        visible: !player.loaded && !viewer.cinemaMode
         text: qsTr("Open Media")
         iconName: "folder"
         primary: true
@@ -81,13 +85,14 @@ Item {
         onClicked: viewer.openRequested()
     }
     Row {
+        objectName: "viewerTools"
         anchors {
             right: parent.right
             top: parent.top
             margins: Theme.spaceMd
         }
         spacing: Theme.spaceXs
-        visible: player.loaded
+        visible: player.loaded && !viewer.cinemaMode
         ToolButton {
             iconName: "fit"
             hint: qsTr("Fit and reset view · ") + preferences.shortcuts.resetView
@@ -128,16 +133,18 @@ Item {
         }
     }
     Chip {
+        objectName: "viewerZoom"
         anchors {
             left: parent.left
             bottom: parent.bottom
             margins: Theme.spaceMd
         }
         text: player.loaded ? Math.round(viewer.fitScale * player.zoom * 100) + "%" : ""
-        visible: player.loaded
+        visible: player.loaded && !viewer.cinemaMode
     }
     DebugOverlay {
         monitor: viewer.resourceMonitor
+        visible: monitor.enabled && !viewer.cinemaMode
         anchors {
             right: parent.right
             bottom: parent.bottom

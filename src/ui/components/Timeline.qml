@@ -7,6 +7,10 @@ Item {
     objectName: "timeline"
     required property var player
     readonly property bool editingBookmark: bookmarkEditor.visible
+    readonly property bool popupOpen: bookmarkMenu.visible || bookmarkEditor.visible
+    function closePopups() {
+        bookmarkMenu.close();
+    }
     implicitHeight: Theme.timelineHeight
     readonly property real trackLeft: Theme.spaceLg
     readonly property real trackWidth: Math.max(1, width - Theme.spaceLg * 2)
