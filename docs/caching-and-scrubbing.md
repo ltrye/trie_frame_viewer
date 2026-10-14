@@ -134,7 +134,8 @@ throttled to about 100 ms, with immediate updates at some state transitions.
 
 Timeline clicks/drags map horizontal position proportionally across the entire
 clip, round to a frame, and clamp to valid bounds. Dragging through a bookmark
-uses the same scrub path.
+uses the same scrub path. Timeline seeks preserve the transport state: playing
+continues in the same direction and at the same speed; paused remains paused.
 
 Right-dragging in the viewer starts from the frame and mouse position at press:
 
@@ -145,17 +146,22 @@ targetFrame = originFrame + round(horizontalDistance / pixelsPerFrame)
 
 The default base is 3 pixels/frame, or 12 while holding Shift. Moving vertically
 away from the press point increases precision. The calculation remains relative
-to the original press position. Scrubbing pauses playback; middle-drag pans.
+to the original press position. Viewer right-dragging pauses playback; middle-drag pans.
 
 ### Latest target wins
 
-`PlayerController.seek(frame, true)` updates the selected frame number immediately
-and records the latest target. A single-shot 16 ms timer batches drag requests.
+`PlayerController.seekTimeline(frame)` preserves transport state, while
+`seek(frame, true)` uses the paused-scrub policy for viewer right-drags and stepping.
+Both update the selected frame number immediately and record the latest target.
+A single-shot 16 ms timer batches drag requests.
 New mouse events update the target without restarting an already running timer,
 so this does not wait for the user to stop moving before issuing work.
 
 On a timer tick, `finishScrub()` requests the latest target. Mouse release also
 calls it immediately to finalize the target without waiting for the next batch.
+For an active transport, the previous audio is stopped during the pending batch,
+old playback ticks/results cannot overwrite the new target, and committing the
+target rebases the playback/audio clocks. Paused scrubbing plays audio snippets.
 The frame number can update before the corresponding pixels arrive: decoding
 and presentation remain asynchronous.
 

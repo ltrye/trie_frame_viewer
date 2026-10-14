@@ -382,6 +382,52 @@ class CoreTests : public QObject {
             QVERIFY(player.cacheUsedMiB() <= 64.);
         }
     }
+    void timelineSeekingPreservesTransportAndRebasesTheClock() {
+        const QString path = qEnvironmentVariable("TFV_TEST_MEDIA");
+        if (path.isEmpty())
+            QSKIP("Generate the integration fixture with scripts/verify.ps1");
+        QTemporaryDir settings;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        tfv::Preferences preferences;
+        preferences.setVolume(0);
+        tfv::PlayerController player(preferences);
+        player.openMedia(QUrl::fromLocalFile(path));
+        QTRY_VERIFY_WITH_TIMEOUT(player.loaded(), 3000);
+        player.setSpeed(1.5);
+        player.seek(24);
+        player.execute("forward");
+        player.seekTimeline(10);
+        player.seekTimeline(60);
+        QVERIFY(player.playing());
+        QCOMPARE(player.currentFrame(), 60);
+        QCOMPARE(player.direction(), 1);
+        QCOMPARE(player.speed(), 1.5);
+        // A held drag's timer flushes without needing a release and starts from
+        // the new target rather than allowing the previous playback clock to win.
+        QTRY_VERIFY_WITH_TIMEOUT(player.currentFrame() > 60, 800);
+        player.seek(72);
+        player.execute("reverse");
+        player.seekTimeline(36);
+        player.finishScrub();
+        QVERIFY(player.playing());
+        QCOMPARE(player.currentFrame(), 36);
+        QCOMPARE(player.direction(), -1);
+        QCOMPARE(player.speed(), 1.5);
+        QTRY_VERIFY_WITH_TIMEOUT(player.currentFrame() < 36, 800);
+        player.execute("pause");
+        player.seekTimeline(10);
+        player.finishScrub();
+        QTest::qWait(100);
+        QVERIFY(!player.playing());
+        QCOMPARE(player.currentFrame(), 10);
+        // Viewer right-drag and frame stepping keep their existing paused-scrub policy.
+        player.execute("forward");
+        player.seek(31, true);
+        player.finishScrub();
+        QVERIFY(!player.playing());
+        QCOMPARE(player.currentFrame(), 31);
+    }
     void singleFrameLoopDoesNotLeaveTheClockPastItsRange() {
         const QString path = qEnvironmentVariable("TFV_TEST_MEDIA");
         if (path.isEmpty())

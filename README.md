@@ -13,6 +13,7 @@ Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline i
 - GPU color conversion and a separate bounded texture cache for recently displayed frames.
 - Automatic D3D11 hardware decoding for supported 1080p+ footage, with CPU/GPU preferences.
 - Timeline scrubbing and relative right-mouse scrubbing with audio snippets.
+- Timeline clicks/drags preserve playing or paused state, including reverse playback.
 - In/out ranges, looping, ping-pong, and playback speeds.
 - One-row Current frame, Start, and End inputs using 1-based frame numbers.
 - Frame bookmarks on the timeline, name tooltips, and right-click rename, frame change, or delete.

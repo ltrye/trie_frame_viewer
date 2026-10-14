@@ -329,7 +329,7 @@ void PlayerController::play(int direction) {
     emit playbackChanged();
 }
 void PlayerController::tick() {
-    if (!m_loaded || !m_playing)
+    if (!m_loaded || !m_playing || m_scrubRequests.isActive())
         return;
     const double elapsed = m_clock.elapsed() / 1000.;
     int next = m_anchor + int(std::floor(elapsed * m_info.fps * m_speed)) * m_direction;
@@ -358,9 +358,15 @@ void PlayerController::requestFrame(int frame) {
     m_worker.seek(frame, m_transportEpoch, m_playing ? m_direction : m_scrubDirection);
 }
 void PlayerController::seek(int frame, bool withAudio) {
+    seek(frame, withAudio, false);
+}
+void PlayerController::seekTimeline(int frame) {
+    seek(frame, true, true);
+}
+void PlayerController::seek(int frame, bool withAudio, bool preservePlayback) {
     if (!m_loaded)
         return;
-    if (withAudio && m_playing)
+    if (withAudio && m_playing && !preservePlayback)
         pause();
     const int value = std::clamp(frame, 0, m_info.frameCount - 1);
     if (withAudio && !m_playing && value == m_requestedFrame && value == m_presentedFrame)
@@ -372,6 +378,12 @@ void PlayerController::seek(int frame, bool withAudio) {
         emit positionChanged();
     }
     if (withAudio) {
+        if (m_playing && !m_scrubRequests.isActive()) {
+            // Keep the transport playing, but stop old audio/results until the
+            // coalesced timeline target is committed and the clock is rebased.
+            ++m_transportEpoch;
+            m_audio.stop();
+        }
         m_requestedFrame = value;
         if (!m_scrubRequests.isActive())
             m_scrubRequests.start();
@@ -384,13 +396,16 @@ void PlayerController::seek(int frame, bool withAudio) {
         resetClock();
 }
 void PlayerController::finishScrub() {
-    if (!m_loaded || m_playing)
+    if (!m_loaded)
         return;
     m_scrubRequests.stop();
     ++m_transportEpoch;
     requestFrame(m_frame);
-    m_audio.scrub(double(m_frame) / m_info.fps - m_audioOffset / 1000.,
-                  m_preferences.integer("scrubMilliseconds"), m_preferences.volume());
+    if (m_playing)
+        resetClock();
+    else
+        m_audio.scrub(double(m_frame) / m_info.fps - m_audioOffset / 1000.,
+                      m_preferences.integer("scrubMilliseconds"), m_preferences.volume());
 }
 void PlayerController::setSpeed(double value) {
     if (!std::isfinite(value))

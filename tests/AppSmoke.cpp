@@ -152,6 +152,68 @@ static bool bookmarkUiSmoke(QQuickWindow& window, tfv::PlayerController& player,
     return model->rowCount() == 2 && !model->find(temporaryId) && !markerFor(temporaryId);
 }
 
+static bool timelineTransportSmoke(QQuickWindow& window, tfv::PlayerController& player,
+                                   tfv::Preferences& preferences) {
+    auto* timeline = window.findChild<QQuickItem*>("timeline");
+    if (!timeline)
+        return false;
+    window.grabWindow();
+    const auto pointFor = [&](int frame) {
+        const double x =
+            timeline->property("trackLeft").toDouble() +
+            double(frame) / (player.frameCount() - 1) * timeline->property("trackWidth").toDouble();
+        return timeline->mapToScene({x, timeline->height() / 2}).toPoint();
+    };
+    player.execute("pause");
+    player.seek(24);
+    player.execute("forward");
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, pointFor(60));
+    bool valid = player.playing() && player.currentFrame() == 60;
+    QTest::qWait(200);
+    valid = player.playing() && player.currentFrame() > 60 && valid;
+    if (player.audioAvailable() && preferences.volume() > 0) {
+        auto* audio = player.findChild<tfv::AudioEngine*>();
+        valid = audio && audio->clockAvailable() && valid;
+    }
+    player.execute("reverse");
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, pointFor(36));
+    valid = player.playing() && player.direction() == -1 && player.currentFrame() == 36 && valid;
+    QTest::qWait(150);
+    valid = player.currentFrame() < 36 && valid;
+    player.execute("forward");
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, pointFor(20));
+    QTest::qWait(40);
+    QTest::mouseMove(&window, pointFor(50));
+    QTest::qWait(40);
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, pointFor(50));
+    const int releasedFrame = player.currentFrame();
+    valid = player.playing() && releasedFrame >= 50 && valid;
+    QTest::qWait(150);
+    valid = player.playing() && player.currentFrame() > releasedFrame && valid;
+    player.execute("pause");
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, pointFor(15));
+    QTest::qWait(100);
+    valid = !player.playing() && player.currentFrame() == 15 && valid;
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, pointFor(20));
+    QTest::mouseMove(&window, pointFor(30));
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, pointFor(30));
+    QTest::qWait(100);
+    valid = !player.playing() && player.currentFrame() == 30 && valid;
+    // Bookmark markers share the timeline's transport policy.
+    auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
+    if (model && model->rowCount()) {
+        const auto bookmark = *model->at(0);
+        auto* marker = visualItem(window.contentItem(), "bookmarkMarker_" + bookmark.id);
+        player.execute("forward");
+        clickItem(window, marker);
+        valid = marker && player.playing() && player.currentFrame() == bookmark.frame && valid;
+    } else
+        valid = false;
+    player.execute("pause");
+    player.seek(24);
+    return valid;
+}
+
 static bool frameFieldsOnOneRow(QQuickWindow& window) {
     const auto* current = window.findChild<QQuickItem*>("currentFrameField");
     const auto* start = window.findChild<QQuickItem*>("playbackStartField");
@@ -333,6 +395,7 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         player.seek(4);
         player.addBookmark("#a8d5c2");
         const bool bookmarksValid = bookmarkUiSmoke(window, player, directory);
+        const bool timelineTransportValid = timelineTransportSmoke(window, player, preferences);
         player.setRange(4, 36);
         player.seek(24);
         if (auto* field = window.findChild<QQuickItem*>("playbackEndField"))
@@ -345,74 +408,79 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
             return;
         }
         player.openProject(QUrl::fromLocalFile(path));
-        QTimer::singleShot(1500, &app, [&, directory, frameFieldsValid, bookmarksValid, saveNameValid] {
-            QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
-            const bool noSidebar = !window.findChild<QQuickItem*>("bookmarkPanel");
-            auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
-            const bool bookmarksRestored = model && model->rowCount() == 2 &&
-                                           model->at(0)->name == "contact pose" && model->at(0)->frame == 40;
-            const auto fieldValue = [&](const char* name) {
-                auto* field = window.findChild<QQuickItem*>(name);
-                return field ? field->property("text").toString() : QString{};
-            };
-            const bool fieldsRestored = fieldValue("playbackStartField") == "5" &&
-                                        fieldValue("playbackEndField") == "37" &&
-                                        fieldValue("currentFrameField") == "25";
-            auto report = std::make_shared<QJsonObject>(QJsonObject{
-                {"loaded", player.loaded()},
-                {"projectSaveDefaultsToMediaName", saveNameValid},
-                {"contextMenuSettingsAvailable",
-                 window.findChild<QQuickItem*>("registerContextMenuButton") != nullptr},
-                {"frame", player.currentFrame()},
-                {"bookmarks", player.bookmarks()->property("count").toInt()},
-                {"rotation", player.rotation()},
-                {"flipH", player.flipH()},
-                {"dirty", player.dirty()},
-                {"error", player.error()},
-                {"cacheMiB", player.cacheUsedMiB()},
-                {"audioAvailable", player.audioAvailable()},
-                {"bookmarkSidebarRemoved", noSidebar},
-                {"bookmarkTooltipAndContextEditing", bookmarksValid},
-                {"bookmarkEditsRestoreWithProject", bookmarksRestored},
-                {"frameFieldsOnOneRow", frameFieldsOnOneRow(window)},
-                {"buttonsCentered", centeredButtons(window)},
-                {"frameFieldsEditAndSync", frameFieldsValid},
-                {"frameFieldsRestoreWithProject", fieldsRestored},
-                {"menuCount", menus.count()},
-                {"darkCaptionMatches", nativeCaptionMatches(window, true)},
-                {"graphicsBackend",
-                 window.rendererInterface()->graphicsApi() == QSGRendererInterface::Direct3D11 ? "Direct3D11"
-                                                                                               : "Other"}});
-            auto valid = std::make_shared<bool>(
-                player.loaded() && player.currentFrame() == 24 &&
-                player.bookmarks()->property("count").toInt() == 2 && player.rotation() == 90 &&
-                player.flipH() && !player.dirty() && player.error().isEmpty() && noSidebar &&
-                bookmarksValid && bookmarksRestored && saveNameValid && frameFieldsOnOneRow(window) &&
-                centeredButtons(window) && frameFieldsValid && fieldsRestored && menus.count() == 8 &&
-                nativeCaptionMatches(window, true));
-            *valid = window.grabWindow().save(directory + "/review-dark.png") && *valid;
-            stage(directory, "Starting forward playback");
-            if (qEnvironmentVariableIsSet("TFV_SMOKE_SILENT"))
-                preferences.setVolume(0);
-            player.execute("forward");
-            stage(directory, "Forward playback started");
-            QTimer::singleShot(240, &app, [&, directory, report, valid] {
-                (*report)["forwardPlayback"] = player.currentFrame() > 24;
-                *valid = player.currentFrame() > 24 && *valid;
-                stage(directory, "Checking forward playback");
-                player.execute("pause");
-                player.seek(24);
-                player.execute("reverse");
-                stage(directory, "Reverse playback started");
-                QTimer::singleShot(180, &app, [&, directory, report, valid] {
-                    (*report)["reversePlayback"] = player.currentFrame() < 24;
-                    *valid = player.currentFrame() < 24 && *valid;
+        QTimer::singleShot(
+            1500, &app,
+            [&, directory, frameFieldsValid, bookmarksValid, saveNameValid, timelineTransportValid] {
+                QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
+                const bool noSidebar = !window.findChild<QQuickItem*>("bookmarkPanel");
+                auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
+                const bool bookmarksRestored = model && model->rowCount() == 2 &&
+                                               model->at(0)->name == "contact pose" &&
+                                               model->at(0)->frame == 40;
+                const auto fieldValue = [&](const char* name) {
+                    auto* field = window.findChild<QQuickItem*>(name);
+                    return field ? field->property("text").toString() : QString{};
+                };
+                const bool fieldsRestored = fieldValue("playbackStartField") == "5" &&
+                                            fieldValue("playbackEndField") == "37" &&
+                                            fieldValue("currentFrameField") == "25";
+                auto report = std::make_shared<QJsonObject>(
+                    QJsonObject{{"loaded", player.loaded()},
+                                {"timelinePreservesPlaybackState", timelineTransportValid},
+                                {"projectSaveDefaultsToMediaName", saveNameValid},
+                                {"contextMenuSettingsAvailable",
+                                 window.findChild<QQuickItem*>("registerContextMenuButton") != nullptr},
+                                {"frame", player.currentFrame()},
+                                {"bookmarks", player.bookmarks()->property("count").toInt()},
+                                {"rotation", player.rotation()},
+                                {"flipH", player.flipH()},
+                                {"dirty", player.dirty()},
+                                {"error", player.error()},
+                                {"cacheMiB", player.cacheUsedMiB()},
+                                {"audioAvailable", player.audioAvailable()},
+                                {"bookmarkSidebarRemoved", noSidebar},
+                                {"bookmarkTooltipAndContextEditing", bookmarksValid},
+                                {"bookmarkEditsRestoreWithProject", bookmarksRestored},
+                                {"frameFieldsOnOneRow", frameFieldsOnOneRow(window)},
+                                {"buttonsCentered", centeredButtons(window)},
+                                {"frameFieldsEditAndSync", frameFieldsValid},
+                                {"frameFieldsRestoreWithProject", fieldsRestored},
+                                {"menuCount", menus.count()},
+                                {"darkCaptionMatches", nativeCaptionMatches(window, true)},
+                                {"graphicsBackend",
+                                 window.rendererInterface()->graphicsApi() == QSGRendererInterface::Direct3D11
+                                     ? "Direct3D11"
+                                     : "Other"}});
+                auto valid = std::make_shared<bool>(
+                    player.loaded() && player.currentFrame() == 24 &&
+                    player.bookmarks()->property("count").toInt() == 2 && player.rotation() == 90 &&
+                    player.flipH() && !player.dirty() && player.error().isEmpty() && noSidebar &&
+                    bookmarksValid && bookmarksRestored && saveNameValid && timelineTransportValid &&
+                    frameFieldsOnOneRow(window) && centeredButtons(window) && frameFieldsValid &&
+                    fieldsRestored && menus.count() == 8 && nativeCaptionMatches(window, true));
+                *valid = window.grabWindow().save(directory + "/review-dark.png") && *valid;
+                stage(directory, "Starting forward playback");
+                if (qEnvironmentVariableIsSet("TFV_SMOKE_SILENT"))
+                    preferences.setVolume(0);
+                player.execute("forward");
+                stage(directory, "Forward playback started");
+                QTimer::singleShot(240, &app, [&, directory, report, valid] {
+                    (*report)["forwardPlayback"] = player.currentFrame() > 24;
+                    *valid = player.currentFrame() > 24 && *valid;
+                    stage(directory, "Checking forward playback");
                     player.execute("pause");
                     player.seek(24);
-                    replayAndLoopSmoke(app, window, player, preferences, directory, report, valid);
+                    player.execute("reverse");
+                    stage(directory, "Reverse playback started");
+                    QTimer::singleShot(180, &app, [&, directory, report, valid] {
+                        (*report)["reversePlayback"] = player.currentFrame() < 24;
+                        *valid = player.currentFrame() < 24 && *valid;
+                        player.execute("pause");
+                        player.seek(24);
+                        replayAndLoopSmoke(app, window, player, preferences, directory, report, valid);
+                    });
                 });
             });
-        });
     });
     QTimer::singleShot(20000, &app, [] { QCoreApplication::exit(5); });
 }

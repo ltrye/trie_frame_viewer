@@ -146,6 +146,7 @@ class PlayerController final : public QObject {
     Q_INVOKABLE bool saveProject(const QUrl& url);
     Q_INVOKABLE void execute(const QString& action);
     Q_INVOKABLE void seek(int frame, bool withAudio = false);
+    Q_INVOKABLE void seekTimeline(int frame);
     Q_INVOKABLE void finishScrub();
     Q_INVOKABLE void setRange(int start, int end);
     Q_INVOKABLE void resetRange();
@@ -171,6 +172,7 @@ class PlayerController final : public QObject {
     void relinkRequired(QString missingPath);
 
   private:
+    void seek(int frame, bool withAudio, bool preservePlayback);
     void open(const QString& path, bool project);
     void pause();
     void play(int direction);

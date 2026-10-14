@@ -59,11 +59,12 @@ Item {
         height: Theme.spaceXl + Theme.spaceLg
         enabled: player.loaded
         cursorShape: Qt.PointingHandCursor
-        onPressed: mouse => player.seek(timeline.frameFor(mouse.x + x), true)
+        onPressed: mouse => player.seekTimeline(timeline.frameFor(mouse.x + x))
         onReleased: player.finishScrub()
+        onCanceled: player.finishScrub()
         onPositionChanged: mouse => {
             if (pressed)
-                player.seek(timeline.frameFor(mouse.x + x), true);
+                player.seekTimeline(timeline.frameFor(mouse.x + x));
         }
     }
     Repeater {
@@ -127,7 +128,10 @@ Item {
             z: 2
             Accessible.role: Accessible.Button
             Accessible.name: bookmarkName
-            Accessible.onPressAction: player.activateBookmark(bookmarkId)
+            Accessible.onPressAction: {
+                player.seekTimeline(bookmarkFrame);
+                player.finishScrub();
+            }
             Rectangle {
                 anchors.centerIn: parent
                 width: Theme.bookmarkMarkerWidth
@@ -150,13 +154,13 @@ Item {
                         bookmarkMenu.show(marker.bookmarkId, marker.bookmarkName, marker.bookmarkFrame, point);
                     } else {
                         scrubbing = true;
-                        player.seek(marker.bookmarkFrame, true);
+                        player.seekTimeline(marker.bookmarkFrame);
                     }
                 }
                 onPositionChanged: mouse => {
                     if (scrubbing) {
                         const point = mapToItem(timeline, mouse.x, mouse.y);
-                        player.seek(timeline.frameFor(point.x), true);
+                        player.seekTimeline(timeline.frameFor(point.x));
                     }
                 }
                 onReleased: {
