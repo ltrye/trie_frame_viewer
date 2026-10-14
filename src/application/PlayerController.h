@@ -15,6 +15,7 @@ class PlayerController final : public QObject {
     Q_PROPERTY(bool loaded READ loaded NOTIFY mediaChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY mediaChanged)
     Q_PROPERTY(QString fileName READ fileName NOTIFY mediaChanged)
+    Q_PROPERTY(QUrl suggestedProjectUrl READ suggestedProjectUrl NOTIFY mediaChanged)
     Q_PROPERTY(QString mediaDescription READ mediaDescription NOTIFY mediaChanged)
     Q_PROPERTY(int frameCount READ frameCount NOTIFY mediaChanged)
     Q_PROPERTY(double fps READ fps NOTIFY mediaChanged)
@@ -52,6 +53,7 @@ class PlayerController final : public QObject {
         return m_loading;
     }
     QString fileName() const;
+    QUrl suggestedProjectUrl() const;
     QString mediaDescription() const;
     QString decodeBackend() const {
         return m_info.decodeBackend;

@@ -14,8 +14,18 @@
         "CMAKE_INSTALL_LIBDIR": ".",
         "BUILD_TESTING": "ON"
       }
+    },
+    {
+      "name": "windows-production",
+      "displayName": "Windows x64 installer payload",
+      "inherits": "windows",
+      "binaryDir": "${sourceDir}/build/production",
+      "cacheVariables": {"BUILD_TESTING": "OFF"}
     }
   ],
-  "buildPresets": [{"name": "windows", "configurePreset": "windows", "configuration": "Release"}],
+  "buildPresets": [
+    {"name": "windows", "configurePreset": "windows", "configuration": "Release"},
+    {"name": "windows-production", "configurePreset": "windows-production", "configuration": "Release"}
+  ],
   "testPresets": [{"name": "windows", "configurePreset": "windows", "configuration": "Release", "output": {"outputOnFailure": true}}]
 }

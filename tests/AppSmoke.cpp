@@ -322,6 +322,11 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         if (*done || !player.loaded() || player.cacheUsedMiB() < 1)
             return;
         *done = true;
+        auto* saveDialog = window.findChild<QObject*>("saveProjectDialog");
+        const bool savePrepared = saveDialog && QMetaObject::invokeMethod(saveDialog, "prepareForMedia");
+        const bool saveNameValid =
+            savePrepared && saveDialog->property("selectedFile").toUrl() == player.suggestedProjectUrl() &&
+            saveDialog->property("currentFolder").toUrl().isParentOf(player.suggestedProjectUrl());
         const bool frameFieldsValid = editFrameFields(window, player);
         player.seek(24);
         player.addBookmark("#e6bf79");
@@ -340,7 +345,7 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
             return;
         }
         player.openProject(QUrl::fromLocalFile(path));
-        QTimer::singleShot(1500, &app, [&, directory, frameFieldsValid, bookmarksValid] {
+        QTimer::singleShot(1500, &app, [&, directory, frameFieldsValid, bookmarksValid, saveNameValid] {
             QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
             const bool noSidebar = !window.findChild<QQuickItem*>("bookmarkPanel");
             auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
@@ -355,6 +360,9 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                                         fieldValue("currentFrameField") == "25";
             auto report = std::make_shared<QJsonObject>(QJsonObject{
                 {"loaded", player.loaded()},
+                {"projectSaveDefaultsToMediaName", saveNameValid},
+                {"contextMenuSettingsAvailable",
+                 window.findChild<QQuickItem*>("registerContextMenuButton") != nullptr},
                 {"frame", player.currentFrame()},
                 {"bookmarks", player.bookmarks()->property("count").toInt()},
                 {"rotation", player.rotation()},
@@ -379,7 +387,7 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                 player.loaded() && player.currentFrame() == 24 &&
                 player.bookmarks()->property("count").toInt() == 2 && player.rotation() == 90 &&
                 player.flipH() && !player.dirty() && player.error().isEmpty() && noSidebar &&
-                bookmarksValid && bookmarksRestored && frameFieldsOnOneRow(window) &&
+                bookmarksValid && bookmarksRestored && saveNameValid && frameFieldsOnOneRow(window) &&
                 centeredButtons(window) && frameFieldsValid && fieldsRestored && menus.count() == 8 &&
                 nativeCaptionMatches(window, true));
             *valid = window.grabWindow().save(directory + "/review-dark.png") && *valid;

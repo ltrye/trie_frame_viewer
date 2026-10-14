@@ -1,4 +1,5 @@
 #include "application/PlayerController.h"
+#include "platform/WindowsIntegration.h"
 #include "presentation/VideoItem.h"
 #include "presentation/WindowChrome.h"
 #ifdef TFV_DEVELOPMENT_TESTS
@@ -15,13 +16,38 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QTextStream>
 #include <QTimer>
 
-int main(int argc, char* argv[]) {
-    QGuiApplication app(argc, argv);
+static void setApplicationIdentity(QCoreApplication& app) {
     app.setOrganizationName("Trie");
     app.setApplicationName("FrameViewer");
     app.setApplicationVersion(QStringLiteral(TFV_APP_VERSION));
+}
+
+static int shellIntegrationCommand(int argc, char* argv[]) {
+    QCoreApplication app(argc, argv);
+    setApplicationIdentity(app);
+    QCommandLineParser parser;
+    parser.addOption({"register-context-menu", "Register the video context menu for this user"});
+    parser.addOption({"unregister-context-menu", "Remove this copy's video context menu registration"});
+    parser.process(app);
+    const bool install = parser.isSet("register-context-menu");
+    if (install == parser.isSet("unregister-context-menu") || !parser.positionalArguments().isEmpty())
+        return 2;
+    tfv::WindowsIntegration integration;
+    const bool success = install ? integration.registerContextMenu() : integration.unregisterContextMenu();
+    QTextStream(success ? stdout : stderr) << integration.message() << Qt::endl;
+    return success ? 0 : 1;
+}
+
+int main(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i)
+        if (QByteArray(argv[i]) == "--register-context-menu" ||
+            QByteArray(argv[i]) == "--unregister-context-menu")
+            return shellIntegrationCommand(argc, argv);
+    QGuiApplication app(argc, argv);
+    setApplicationIdentity(app);
     app.setWindowIcon(QIcon(":/tfv/branding/fv-icon.svg"));
     QQuickStyle::setStyle("Basic");
     qmlRegisterType<tfv::VideoItem>("Trie.Media", 1, 0, "VideoSurface");
@@ -30,8 +56,12 @@ int main(int argc, char* argv[]) {
     parser.setApplicationDescription("Trie FrameViewer — animation reference and playblast review");
     parser.addHelpOption();
     parser.addVersionOption();
+    parser.addOption({"register-context-menu", "Register the video context menu for this user and exit"});
+    parser.addOption(
+        {"unregister-context-menu", "Remove this copy's video context menu registration and exit"});
     parser.addPositionalArgument("media", "Optional video, sequence image, or .tfv project");
     parser.addOption({"screenshot", "Capture the app to a PNG and exit", "path"});
+#ifdef TFV_DEVELOPMENT_TESTS
     parser.addOption({"benchmark", "Run repeatable native seek/memory benchmark and exit", "report"});
     parser.addOption({"cache-mib", "Video cache budget for development benchmark", "MiB", "512"});
     parser.addOption(
@@ -40,25 +70,35 @@ int main(int argc, char* argv[]) {
     parser.addOption({"smoke-test",
                       "Exercise playback and project persistence, capture screenshots, and exit",
                       "directory"});
+#endif
     parser.process(app);
-    if (parser.isSet("smoke-test") || parser.isSet("screenshot") || parser.isSet("benchmark")) {
-        const QString output = parser.isSet("benchmark") ? QFileInfo(parser.value("benchmark")).absolutePath()
-                               : parser.isSet("smoke-test")
-                                   ? QFileInfo(parser.value("smoke-test")).absoluteFilePath()
-                                   : QFileInfo(parser.value("screenshot")).absolutePath();
+    QString diagnosticDirectory;
+    if (parser.isSet("screenshot"))
+        diagnosticDirectory = QFileInfo(parser.value("screenshot")).absolutePath();
+#ifdef TFV_DEVELOPMENT_TESTS
+    if (parser.isSet("benchmark"))
+        diagnosticDirectory = QFileInfo(parser.value("benchmark")).absolutePath();
+    else if (parser.isSet("smoke-test"))
+        diagnosticDirectory = QFileInfo(parser.value("smoke-test")).absoluteFilePath();
+#endif
+    if (!diagnosticDirectory.isEmpty()) {
         QSettings::setDefaultFormat(QSettings::IniFormat);
-        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, output + "/settings");
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, diagnosticDirectory + "/settings");
     }
     tfv::Preferences preferences;
+#ifdef TFV_DEVELOPMENT_TESTS
     if (parser.isSet("benchmark")) {
         preferences.setCacheMiB(parser.value("cache-mib").toInt());
         preferences.setDecodeMode(parser.value("decode-mode"));
         preferences.setDecoderThreads(parser.value("decoder-threads").toInt());
     }
+#endif
     tfv::PlayerController player(preferences);
+    tfv::WindowsIntegration windowsIntegration;
     QQmlApplicationEngine engine;
-    engine.setInitialProperties(
-        {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}});
+    engine.setInitialProperties({{"player", QVariant::fromValue(&player)},
+                                 {"preferences", QVariant::fromValue(&preferences)},
+                                 {"windowsIntegration", QVariant::fromValue(&windowsIntegration)}});
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },
         Qt::QueuedConnection);

@@ -4,14 +4,45 @@
 #include "media/Decoder.h"
 #include "media/FrameCache.h"
 #include "media/MediaWorker.h"
+#include "platform/WindowsIntegration.h"
 #include <QFile>
 #include <QJsonArray>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QtTest>
 
 class CoreTests : public QObject {
     Q_OBJECT
   private slots:
+    void contextMenuUsesQuotedPathsAndPreservesOtherApplications() {
+        const QString root = "HKEY_CURRENT_USER\\Software\\Trie\\FrameViewerTests\\" +
+                             QUuid::createUuid().toString(QUuid::WithoutBraces);
+        tfv::WindowsIntegration first("C:/Test apps/Trie FrameViewer/TrieFrameViewer.exe", root);
+        QSettings registry(root, QSettings::NativeFormat);
+        registry.setValue(".mp4/.", "Other.Player");
+        registry.setValue(".mp4/OpenWithProgids/Other.Player", "");
+        QVERIFY(first.registerContextMenu());
+        QVERIFY(first.registered());
+        QCOMPARE(
+            registry.value("SystemFileAssociations/.mp4/shell/TrieFrameViewer.Open/command/.").toString(),
+            QString("\"C:\\Test apps\\Trie FrameViewer\\TrieFrameViewer.exe\" \"%1\""));
+        QCOMPARE(registry.value(".mp4/.").toString(), QString("Other.Player"));
+        QVERIFY(first.unregisterContextMenu());
+        QVERIFY(!first.registered());
+        QVERIFY(!registry.contains("SystemFileAssociations/.mp4/shell/TrieFrameViewer.Open/command/."));
+        QVERIFY(registry.contains(".mp4/OpenWithProgids/Other.Player"));
+        QVERIFY(first.registerContextMenu());
+        tfv::WindowsIntegration moved("C:/Another copy/TrieFrameViewer.exe", root);
+        QVERIFY(moved.registerContextMenu());
+        first.refresh();
+        QVERIFY(!first.registered());
+        QVERIFY(first.unregisterContextMenu());
+        moved.refresh();
+        QVERIFY(moved.registered());
+        QVERIFY(moved.unregisterContextMenu());
+        registry.remove(""); // Only the isolated test registry subtree.
+        registry.sync();
+    }
     void compactFrameStoresOddDimensionsAndColorMetadata() {
         const int width = 129, height = 65;
         QByteArray y(width * height, char(16)), u(65 * 33, char(128)), v(65 * 33, char(128));
@@ -269,10 +300,14 @@ class CoreTests : public QObject {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
         tfv::Preferences preferences;
         tfv::PlayerController player(preferences);
+        QVERIFY(player.suggestedProjectUrl().isEmpty());
         QSignalSpy frames(&player, &tfv::PlayerController::frameReady);
         player.openMedia(QUrl::fromLocalFile("nonexistent-input.mp4"));
         player.openMedia(QUrl::fromLocalFile(path));
         QTRY_VERIFY_WITH_TIMEOUT(player.loaded(), 3000);
+        QCOMPARE(player.suggestedProjectUrl(),
+                 QUrl::fromLocalFile(QFileInfo(path).absolutePath() + '/' +
+                                     QFileInfo(path).completeBaseName() + ".tfv"));
         QVERIFY(player.error().isEmpty());
         frames.clear();
         player.seek(10);

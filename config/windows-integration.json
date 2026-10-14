@@ -1,0 +1,9 @@
+{
+  "displayName": "Trie FrameViewer",
+  "executableName": "TrieFrameViewer.exe",
+  "verbId": "TrieFrameViewer.Open",
+  "mediaProgId": "Trie.FrameViewer.Media",
+  "projectProgId": "Trie.FrameViewer.Project",
+  "videoExtensions": [".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"],
+  "projectExtension": ".tfv"
+}

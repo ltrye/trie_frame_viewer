@@ -109,6 +109,12 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
 QString PlayerController::fileName() const {
     return QFileInfo(m_mediaPath).fileName();
 }
+QUrl PlayerController::suggestedProjectUrl() const {
+    if (!m_loaded)
+        return {};
+    const QFileInfo media(m_mediaPath);
+    return QUrl::fromLocalFile(media.absolutePath() + '/' + media.completeBaseName() + ".tfv");
+}
 void PlayerController::applyDecodePreferences() {
     const QString mode = m_preferences.decodeMode();
     m_worker.setDecodeOptions(m_preferences.decoderThreads(), mode != "software",

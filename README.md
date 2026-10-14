@@ -20,6 +20,8 @@ Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline i
 - Versioned `.tfv` project save/load, relative media paths, identity checks, and relinking.
 - Review settings: range, frame, speed, audio offset, pan, zoom, rotation, and flips.
 - Autosave recovery files beside saved projects and unsaved-change prompts.
+- Save dialogs suggest the current media's base name with a `.tfv` extension.
+- Per-user Windows video context-menu registration and removal in Preferences.
 - Dark/light themes, configurable keyboard shortcuts, fullscreen, and always on top.
 
 ## Run the built app
@@ -74,6 +76,8 @@ the moving development asset. Qt is pinned to 6.8.3.
 | Bookmarks and project schema | `src/domain/` |
 | GPU display integration | `src/presentation/VideoItem.*`, `YuvNode.*`, `shaders/` |
 | Native Windows title-bar integration | `src/presentation/WindowChrome.*` |
+| Windows context menu / Open with integration | `src/platform/WindowsIntegration.*`, `config/windows-integration.json` |
+| Installer and production packaging | `packaging/windows/installer.nsi`, `scripts/build_installer.py` |
 
 See `docs/architecture.md` for ownership and extension rules, and
 `docs/project-format.md` for `.tfv` field meanings.
@@ -85,9 +89,8 @@ transparent-background monogram, multi-size Windows ICO, and PNG preview. Pillow
 is needed only for the ICO/PNG exports. Colors and geometry live in the generator.
 The build embeds the ICO in the executable and the SVG as the Qt window icon.
 
-The bookmark rail starts collapsed. Click its bookmark icon or press `Ctrl+B`
-to expand/collapse it. Entries show frame numbers; right-click an entry to delete
-it. Bookmark names in existing `.tfv` files are preserved as project metadata.
+Bookmarks appear on the timeline. Hover to see a name; right-click to rename,
+change the frame, or delete. Older range bookmarks load at their first frame.
 Title-bar colors follow the app theme on Windows 11; Windows 10 uses the available
 system frame styling. The native frame keeps Windows resize, snap, and maximize behavior.
 
@@ -161,8 +164,8 @@ and ranges. Decoder tests compare D3D11 and software frames when hardware is ava
 The verification script generates a local 4-second H.264/AAC test clip and a
 12-second 1080p long-GOP seek fixture, runs tests, and exercises `.tfv` save/reopen
 in the actual QML app. Screenshots and a JSON report
-are written to `artifacts/`. It also checks button centering, the default rail,
-rail/menu clicks, compact sizing, native title-bar theme application, and audio
+are written to `artifacts/`. It also checks button centering, timeline bookmark
+editing/tooltips, media-based save names, compact sizing, native title-bar themes, and audio
 remaining active through repeated playback loops. Audio tests explicitly skip
 when no native audio output device is available.
 Headless screenshots validate the software scene graph;
@@ -170,7 +173,14 @@ Windows GPU rendering is tested separately when running the desktop app.
 
 ## Distribution
 
-`python scripts/dev.py deploy` collects Qt/QML plugins and FFmpeg DLLs in `out/`.
-This is a development bundle. Before public release, complete the dependency/source
-notice package, compiler runtime packaging, clean-machine validation, signing, and
-an installer. FFmpeg is LGPL/shared in this build. No project license has been chosen.
+Run `python scripts/dev.py installer` to build the per-user Windows installer at
+`out/installer/TrieFrameViewer-Setup-1.0.0-x64.exe` (the filename follows the CMake version).
+Its production build disables development tests and includes Qt/QML plugins, FFmpeg,
+Visual C++ runtime DLLs, dependency notices, a Start menu option, optional desktop
+shortcut, optional video context menu, and an uninstaller. NSIS 3.13 is downloaded
+into `.tools/` and verified against a pinned SHA-256; no compiler is installed globally.
+
+The normal app output stays in `out/TrieFrameViewer`. Installer staging is generated
+under `build/production/payload` and refreshed on each package build. Package checksums
+are beside the installer. See `docs/windows-distribution.md` for installation, tests,
+and release considerations. No project source-code license has been chosen.

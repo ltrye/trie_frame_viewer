@@ -17,7 +17,7 @@ def main():
     if operation == "configure":
         run(["cmake", "--preset", "windows"])
     elif operation == "build":
-        run(["cmake", "--build", "--preset", "windows", "--parallel", "4"])
+        run(["cmake", "--build", "--preset", "windows", "--parallel", "4", "--", "/nodeReuse:false"])
     elif operation == "test":
         run(["ctest", "--preset", "windows"])
     elif operation == "deploy":
@@ -32,8 +32,10 @@ def main():
             except PermissionError:
                 raise SystemExit("Cannot update the deployed executable. Close Trie FrameViewer, then retry deploy.")
         run(["cmake", "--install", "build", "--config", "Release", "--prefix", str(DEPLOYMENT)])
+    elif operation == "installer":
+        run([sys.executable, "scripts/build_installer.py"])
     else:
-        raise SystemExit("Use configure, build, test, or deploy")
+        raise SystemExit("Use configure, build, test, deploy, or installer")
 
 if __name__ == "__main__":
     main()

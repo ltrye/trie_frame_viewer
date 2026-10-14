@@ -7,6 +7,8 @@ Controls.Dialog {
     id: settings
     required property var preferences
     required property var player
+    required property var windowsIntegration
+    onOpened: windowsIntegration.refresh()
     function openTab(index) {
         tabs.currentIndex = index;
         open();
@@ -54,6 +56,28 @@ Controls.Dialog {
                         currentIndex: preferences.theme === "dark" ? 0 : 1
                         onActivated: preferences.theme = index === 0 ? "dark" : "light"
                     }
+                }
+                SectionLabel {
+                    text: qsTr("WINDOWS INTEGRATION")
+                }
+                Controls.Button {
+                    objectName: "registerContextMenuButton"
+                    text: windowsIntegration.registered ? qsTr("Remove video context menu") : qsTr("Register video context menu")
+                    enabled: windowsIntegration.supported
+                    onClicked: {
+                        if (windowsIntegration.registered)
+                            windowsIntegration.unregisterContextMenu();
+                        else
+                            windowsIntegration.registerContextMenu();
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: windowsIntegration.message.length ? windowsIntegration.message : windowsIntegration.registered ? qsTr("Registered for this user.") : qsTr("Right-click a video to open it with Trie FrameViewer. Your default player stays the same. On Windows 11, check Show more options.")
+                    wrapMode: Text.WordWrap
+                    color: windowsIntegration.hasError ? Theme.warning : Theme.secondary
+                    font.family: Theme.font
+                    font.pixelSize: Theme.textBody
                 }
                 SectionLabel {
                     text: qsTr("RAM CACHE")

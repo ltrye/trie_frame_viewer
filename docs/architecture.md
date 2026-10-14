@@ -13,6 +13,13 @@ immutable VideoFrame values, and PCM bytes.
 is a presentation-facing facade; new persistence migrations belong in domain and
 new decoder behavior belongs in media, not this class.
 
+`platform/WindowsIntegration` owns per-user Windows registry integration. QML receives
+it explicitly and only requests register/remove/refresh operations. Video extensions,
+verb identifiers, and ProgIDs live in `config/windows-integration.json`; the installer
+cleanup is generated from the same configuration. Registry removals check the quoted
+command path before deleting entries, so uninstalling an older copy preserves a newer
+copy's registration. The adapter never changes video default-player/UserChoice values.
+
 `presentation` adapts VideoFrame values to Qt Quick textures. VideoItem selects the
 YUV shader or an RGBA/software-rendering fallback. YuvNode owns a bounded texture
 LRU and all plane uploads on the render thread. Its QRhi integration uses Qt's

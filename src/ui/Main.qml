@@ -10,6 +10,7 @@ Controls.ApplicationWindow {
     id: app
     required property var player
     required property var preferences
+    required property var windowsIntegration
     width: Theme.defaultWidth
     height: Theme.defaultHeight
     minimumWidth: Theme.minimumWidth
@@ -96,7 +97,7 @@ Controls.ApplicationWindow {
             if (action === "saveProject" && player.projectPath.length)
                 player.saveProject("");
             else
-                saveDialog.open();
+                saveDialog.openForMedia();
         } else if (action === "bookmark")
             bookmark();
         else if (action === "settings")
@@ -156,6 +157,16 @@ Controls.ApplicationWindow {
     }
     FileDialog {
         id: saveDialog
+        objectName: "saveProjectDialog"
+        function prepareForMedia() {
+            const suggestion = String(player.suggestedProjectUrl);
+            currentFolder = suggestion.slice(0, suggestion.lastIndexOf("/") + 1);
+            selectedFile = player.suggestedProjectUrl;
+        }
+        function openForMedia() {
+            prepareForMedia();
+            open();
+        }
         title: qsTr("Save project")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "tfv"
@@ -217,7 +228,7 @@ Controls.ApplicationWindow {
                     app.continueAction(app.pendingAction);
             } else {
                 app.savingForContinuation = true;
-                saveDialog.open();
+                saveDialog.openForMedia();
             }
         }
         onDiscarded: app.continueAction(app.pendingAction)
@@ -243,6 +254,7 @@ Controls.ApplicationWindow {
         parent: Controls.Overlay.overlay
         preferences: app.preferences
         player: app.player
+        windowsIntegration: app.windowsIntegration
     }
     DropArea {
         anchors.fill: parent

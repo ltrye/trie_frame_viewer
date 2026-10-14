@@ -7,11 +7,17 @@ add_library(tfv_core STATIC
     media/AudioEngine.cpp media/AudioEngine.h
     application/Preferences.cpp application/Preferences.h
     application/PlayerController.cpp application/PlayerController.h
+    platform/WindowsIntegration.cpp platform/WindowsIntegration.h
 )
 target_include_directories(tfv_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(tfv_core PUBLIC Qt6::Core Qt6::Gui Qt6::Multimedia FFmpeg::FFmpeg)
 set_source_files_properties(../config/defaults.json PROPERTIES QT_RESOURCE_ALIAS "config/defaults.json")
 qt_add_resources(tfv_core tfv_defaults PREFIX "/tfv" FILES ../config/defaults.json)
+set_source_files_properties(../config/windows-integration.json PROPERTIES QT_RESOURCE_ALIAS "config/windows-integration.json")
+qt_add_resources(tfv_core tfv_windows_integration PREFIX "/tfv" FILES ../config/windows-integration.json)
+if(WIN32)
+    target_link_libraries(tfv_core PUBLIC shell32)
+endif()
 target_compile_definitions(tfv_core PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 if(MSVC)
     target_compile_options(tfv_core PRIVATE /W4 /permissive- /utf-8)

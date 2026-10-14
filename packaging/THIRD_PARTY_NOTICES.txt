@@ -1,0 +1,51 @@
+Trie FrameViewer - third-party components
+=======================================
+
+This application dynamically links to Qt and FFmpeg. Their licenses, copyright
+notices and Qt's upstream software bills of materials are in the licenses folder.
+Replacing a library with an ABI-compatible build is permitted. Reverse engineering
+for debugging modifications to these LGPL libraries is permitted.
+
+Qt 6.8.3
+--------
+Copyright (C) The Qt Company Ltd. and other contributors.
+The deployed Qt runtime modules are used under LGPL version 3.
+Qt includes additional third-party components; see licenses/qt-sbom and
+licenses/Qt-third-party-notices.txt for their upstream notices and license data.
+Upstream source: https://download.qt.io/archive/qt/6.8/6.8.3/submodules/
+Relevant source modules: qtbase, qtdeclarative, qtmultimedia, qtsvg, qttranslations.
+Build/deployment tools also use qtshadertools and qttools.
+
+FFmpeg 8.x application decoder
+-----------------------------
+Copyright (c) the FFmpeg developers and contributors.
+LGPL version 3; shared libraries built without GPL components.
+The SDK origin and SHA-256 are recorded in licenses/ffmpeg-sdk-lock.json.
+This SDK identifies itself as n8.1.3-14-g330caae0c1-20261006.
+FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/330caae0c1
+Build recipes and dependencies: https://github.com/BtbN/FFmpeg-Builds
+Build artifacts and corresponding build information:
+https://github.com/BtbN/FFmpeg-Builds/releases
+Upstream legal/build information: https://ffmpeg.org/legal.html
+
+FFmpeg 7.1 Qt Multimedia backend
+--------------------------------
+Qt's Multimedia plugin deploys a separate set of FFmpeg 7.1 libraries, under
+LGPL version 2.1 or later. These do not replace the app's FFmpeg 8 decoder.
+Source: https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+Qt build configuration: https://code.qt.io/cgit/qtmultimedia/qtmultimedia.git/tree/?h=v6.8.3
+
+Microsoft Visual C++ runtime
+---------------------------
+Copyright Microsoft Corporation. Redistributable runtime files are deployed from
+the installed Visual C++ Build Tools. They are separate from the LGPL libraries.
+
+NSIS installer
+--------------
+Copyright (C) 1999-2026 Contributors.
+The installer uses NSIS 3.13. Its notices, including the LZMA linking exception,
+are included in licenses/NSIS.txt.
+Source: https://nsis.sourceforge.io/Download
+
+These notices concern third-party components and do not assign a license to the
+Trie FrameViewer application source code.
