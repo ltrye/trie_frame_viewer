@@ -1,6 +1,9 @@
 qt_add_executable(tfv_tests CoreTests.cpp)
 qt_add_executable(tfv_audio_tests AudioTests.cpp)
 qt_add_executable(tfv_engine_benchmark EngineBench.cpp)
+qt_add_executable(tfv_scrub_benchmark ScrubBench.cpp)
+target_link_libraries(tfv_scrub_benchmark PRIVATE tfv_core)
+install(TARGETS tfv_scrub_benchmark RUNTIME DESTINATION .)
 target_link_libraries(tfv_engine_benchmark PRIVATE tfv_core psapi)
 install(TARGETS tfv_engine_benchmark RUNTIME DESTINATION .)
 qt_add_executable(tfv_renderer_tests RendererTests.cpp

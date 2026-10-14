@@ -118,8 +118,11 @@ three quarters ahead; reverse movement swaps that bias.
 - **Reverse:** fill the earlier part first, then the later part.
 - Both passes decode in **ascending frame order**, including reverse lookbehind,
   to avoid repeatedly seeking backward through the same compressed-video group.
-- Already cached candidates are skipped. Useful intermediate frames decoded on
-  the way to a target are also retained when they belong to the current window.
+- Already cached candidates are skipped. Background decoding retains useful
+  intermediate frames inside the current window. Interactive foreground seeks
+  materialize only the requested frame, avoiding speculative GPU downloads and
+  pixel copies before presenting it. Reverse playback retains useful lookbehind
+  intermediates; forward playback continues decoding toward its clock target.
 - Foreground requests take priority. Prefetch waits for an 80 ms quiet period
   after requested-frame work and is cancelled/superseded by newer requests.
 
@@ -157,18 +160,25 @@ A single-shot 16 ms timer batches drag requests.
 New mouse events update the target without restarting an already running timer,
 so this does not wait for the user to stop moving before issuing work.
 
-On a timer tick, `finishScrub()` requests the latest target. Mouse release also
-calls it immediately to finalize the target without waiting for the next batch.
-For an active transport, the previous audio is stopped during the pending batch,
-old playback ticks/results cannot overwrite the new target, and committing the
-target rebases the playback/audio clocks. Paused scrubbing plays audio snippets.
-The frame number can update before the corresponding pixels arrive: decoding
-and presentation remain asynchronous.
+On a timer tick, `flushScrub()` submits the latest target within one drag-preview
+session. New batches share the session epoch, so useful in-flight foreground
+decoding can finish instead of repeatedly seeking again. Completed session
+previews may be shown while the input cursor remains at the latest selected
+frame. `presentedFrame()` identifies the actual decoded image for diagnostics.
+
+Mouse release calls `finishScrub()` to end the preview session and issue an exact
+target request in a new epoch. A 100 ms input quiet period also finalizes the
+target, supporting callers that do not send an explicit release. Old session
+results cannot replace this final frame. Playing/paused state, speed, and
+direction are preserved. While timeline input is active, the playing flag stays
+set but playback ticks and continuous audio wait; finalization rebases and resumes
+the clocks. Paused scrub audio follows delivered previews. The frame number can
+update before its pixels arrive because decoding and presentation are asynchronous.
 
 `MediaWorker` keeps one pending target, overwriting it with newer requests instead
 of queuing every intermediate mouse position. It checks RAM first; a miss invokes
-FFmpeg and retains useful intermediate frames. No synthetic in-between frames
-are generated.
+FFmpeg for the requested pixels. Cache warming is deferred to idle prefetch.
+No synthetic in-between frames are generated.
 
 ## 5. Seeking compressed video and rejecting stale results
 
@@ -190,8 +200,8 @@ Three kinds of identifiers prevent obsolete work from taking over the viewer:
 | Transport epoch | Invalidate earlier seeks or playback sessions when transport changes |
 | Request revision | Supersede the pending target and cancel speculative prefetch |
 
-While paused, the controller accepts decoded results only for the latest target
-and valid source/epoch. During playback, requests can share an epoch so completed
+Outside active drag previews, a paused controller accepts decoded results only
+for the latest exact target and valid source/epoch. During playback, requests share an epoch so completed
 frames may still advance in the playback direction toward the latest clock
 target. Cancelling on every playback tick would otherwise starve presentation.
 After a cancelled decode, the decoder forces a fresh seek because the demuxer may
@@ -274,6 +284,7 @@ Defaults live in `config/defaults.json`; exposed preferences may override them.
 | `gpuCacheMiB` | 64 | YUV texture-cache pixel budget |
 | `audioCacheMiB` | 64 | Decoded PCM budget |
 | `scrubIntervalMs` | 16 | Controller drag-request batching interval |
+| `scrubSettleMs` | 100 | Input quiet period before an exact final seek |
 | `prefetchDelayMs` | 80 | Quiet period before speculative decoding |
 | `scrubMilliseconds` | 70 | Audio preview duration |
 | `scrubPixelsPerFrame` | 3 | Normal viewer right-drag sensitivity |

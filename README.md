@@ -2,7 +2,7 @@
 
 A compact Windows desktop player for animation reference footage and playblasts.
 Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline is
-**v1.0**, with application version **1.1.1**.
+**v1.0**, with application version **1.1.2**.
 
 ## Download and install
 
@@ -21,6 +21,7 @@ app before updating. The accompanying `.sha256` file verifies the download.
 - Automatic D3D11 hardware decoding for supported 1080p+ footage, with CPU/GPU preferences.
 - Timeline scrubbing and relative right-mouse scrubbing with audio snippets.
 - Timeline clicks/drags preserve playing or paused state, including reverse playback.
+- Drag previews prioritize requested pixels and preserve useful decoding; release commits an exact frame.
 - Cinema Mode (F11) hides the window chrome and viewer tools, with the timeline and playback controls always visible below the video.
 - In/out ranges, looping, ping-pong, and playback speeds.
 - One-row Current frame, Start, and End inputs using 1-based frame numbers.

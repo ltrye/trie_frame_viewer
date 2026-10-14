@@ -72,16 +72,21 @@ model and persist in `.tfv` projects. There is no bookmark sidebar or range-book
 - The worker accepts one latest requested seek rather than accumulating mouse moves.
 - A source generation invalidates results from previous media. A transport epoch
   invalidates frames from earlier user seeks, pauses, or playback sessions. During
-  playback, completed frames can advance monotonically toward the clock target;
-  while paused, only the exact requested frame is accepted. The displayed frame
-  and the requested clock target are separate controller state.
+  playback, completed frames can advance monotonically toward the clock target.
+  A drag shares one preview epoch so useful in-flight results can be shown while
+  the cursor follows the latest input. Release (or 100 ms of quiet) commits an
+  exact seek in a new epoch, rejecting older previews. Outside preview sessions,
+  paused seeks accept only the exact target. The actual presented frame and the
+  selected/clock target are separate controller state.
 - The RAM cache uses LRU eviction biased toward a window around the playhead and
   scrub/playback direction. Moving the window does not immediately discard visited
   regions. Under byte pressure, old frames outside the window are evicted first.
   Clips that fit retain all frames. New requests cancel speculative prefetch; a new transport epoch also
   cancels foreground decoding. Cancellation forces the next decode to seek again
   because the demuxer may have advanced beyond the last returned frame.
-- Both foreground decoding and prefetch retain useful intermediate GOP frames.
+- Foreground seeks materialize only the requested frame, leaving speculative
+  intermediate copies/downloads to idle prefetch. Reverse playback retains useful
+  lookbehind intermediates to avoid repeated GOP decoding during normal playback.
   Prefetch traverses each planned batch in ascending order, including the reverse
   lookbehind region, to avoid repeated backward FFmpeg seeks. Small forward jumps
   can continue decoding without flushing. Existing cached intermediates are skipped.

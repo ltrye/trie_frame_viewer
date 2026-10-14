@@ -11,10 +11,11 @@ namespace tfv {
 class MediaWorker final : public QObject {
     Q_OBJECT
   public:
+    enum class RequestKind { Seek, Playback };
     explicit MediaWorker(QObject* parent = nullptr);
     ~MediaWorker() override;
     void open(const QString& path, quint64 generation, qint64 cacheBudget, qint64 audioBudget);
-    void seek(int index, quint64 epoch = 0, int direction = 1);
+    void seek(int index, quint64 epoch = 0, int direction = 1, RequestKind kind = RequestKind::Seek);
     void setBudget(qint64 budget);
     void setDecodeOptions(int threads, bool hardware, int minimumPixels = 0, int prefetchDelayMs = 80);
   signals:
@@ -34,6 +35,7 @@ class MediaWorker final : public QObject {
     quint64 m_generation = 0;
     int m_requested = -1;
     int m_direction = 1;
+    RequestKind m_requestKind = RequestKind::Seek;
     bool m_openPending = false;
     qint64 m_audioBudget = 64 * 1024 * 1024;
     std::atomic<qint64> m_budget{512 * 1024 * 1024};

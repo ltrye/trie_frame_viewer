@@ -73,6 +73,10 @@ class PlayerController final : public QObject {
     int currentFrame() const {
         return m_frame;
     }
+    // During a drag, the input cursor may lead the most recently shown preview.
+    int presentedFrame() const {
+        return m_presentedFrame;
+    }
     bool playing() const {
         return m_playing;
     }
@@ -179,7 +183,8 @@ class PlayerController final : public QObject {
     void tick();
     void resetClock();
     void restartAudio();
-    void requestFrame(int frame);
+    void requestFrame(int frame, MediaWorker::RequestKind kind = MediaWorker::RequestKind::Seek);
+    void flushScrub();
     void applyDecodePreferences();
     void markDirty();
     void fail(const QString& text);
@@ -191,7 +196,7 @@ class PlayerController final : public QObject {
     AudioEngine m_audio;
     MediaInfo m_info;
     QTimer m_timer, m_autosave;
-    QTimer m_scrubRequests;
+    QTimer m_scrubRequests, m_scrubSettle;
     QElapsedTimer m_clock;
     quint64 m_generation = 0, m_transportEpoch = 0;
     int m_requestedFrame = 0;
@@ -200,6 +205,7 @@ class PlayerController final : public QObject {
     double m_lastVolume = 0;
     int m_frame = 0, m_anchor = 0, m_in = 0, m_out = 0, m_direction = 1, m_rotation = 0, m_audioOffset = 0;
     double m_speed = 1, m_zoom = 1, m_panX = 0, m_panY = 0;
+    bool m_scrubbing = false;
     bool m_loaded = false, m_loading = false, m_playing = false, m_dirty = false, m_flipH = false,
          m_flipV = false;
     QString m_mediaPath, m_projectPath, m_status = "Ready when you are", m_error, m_loop = "loop",

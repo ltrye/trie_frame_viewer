@@ -3,6 +3,7 @@
   "audioCacheMiB": 64,
   "scrubMilliseconds": 70,
   "scrubIntervalMs": 16,
+  "scrubSettleMs": 100,
   "decoderThreads": 2,
   "decodeMode": "auto",
   "hardwareMinimumPixels": 2073600,

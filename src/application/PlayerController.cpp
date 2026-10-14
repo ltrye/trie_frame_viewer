@@ -15,7 +15,11 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
     m_scrubRequests.setSingleShot(true);
     m_scrubRequests.setTimerType(Qt::PreciseTimer);
     m_scrubRequests.setInterval(m_preferences.integer("scrubIntervalMs"));
-    connect(&m_scrubRequests, &QTimer::timeout, this, &PlayerController::finishScrub);
+    connect(&m_scrubRequests, &QTimer::timeout, this, &PlayerController::flushScrub);
+    m_scrubSettle.setSingleShot(true);
+    m_scrubSettle.setTimerType(Qt::PreciseTimer);
+    m_scrubSettle.setInterval(m_preferences.integer("scrubSettleMs"));
+    connect(&m_scrubSettle, &QTimer::timeout, this, &PlayerController::finishScrub);
     m_timer.setInterval(4);
     m_timer.setTimerType(Qt::PreciseTimer);
     connect(&m_timer, &QTimer::timeout, this, &PlayerController::tick);
@@ -61,9 +65,16 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
     });
     connect(&m_worker, &MediaWorker::decoded, this,
             [this](quint64 gen, quint64 epoch, int index, VideoFrame image) {
-                if (gen != m_generation || epoch != m_transportEpoch)
+                if (gen != m_generation || epoch != m_transportEpoch || image.isNull())
                     return;
-                if (m_playing) {
+                // Completed previews belong to one drag session. Keep the input
+                // cursor at the latest target while showing useful in-flight work.
+                // Exact/released seeks still reject every non-target result.
+                if (m_scrubbing) {
+                    if (!m_playing)
+                        m_audio.scrub(double(index) / m_info.fps - m_audioOffset / 1000.,
+                                      m_preferences.integer("scrubMilliseconds"), m_preferences.volume());
+                } else if (m_playing) {
                     const bool advances = m_direction > 0 ? index >= m_frame && index <= m_requestedFrame
                                                           : index <= m_frame && index >= m_requestedFrame;
                     if (!advances)
@@ -292,10 +303,14 @@ bool PlayerController::restore(const QJsonObject& obj) {
 }
 void PlayerController::pause() {
     const bool wasPlaying = m_playing;
+    const bool wasScrubbing = m_scrubbing;
+    m_scrubRequests.stop();
+    m_scrubSettle.stop();
+    m_scrubbing = false;
     m_playing = false;
     m_timer.stop();
     m_audio.stop();
-    if (wasPlaying) {
+    if (wasPlaying || wasScrubbing) {
         ++m_transportEpoch;
         requestFrame(m_frame);
     }
@@ -303,7 +318,7 @@ void PlayerController::pause() {
 }
 void PlayerController::restartAudio() {
     m_audio.stop();
-    if (m_playing && m_direction > 0)
+    if (m_playing && !m_scrubbing && m_direction > 0)
         m_audio.play(double(m_frame) / m_info.fps - m_audioOffset / 1000., m_speed, m_preferences.volume());
 }
 void PlayerController::resetClock() {
@@ -318,6 +333,8 @@ void PlayerController::play(int direction) {
     if (m_playing)
         pause();
     m_scrubRequests.stop();
+    m_scrubSettle.stop();
+    m_scrubbing = false;
     m_direction = direction;
     if (m_frame < m_in || m_frame > m_out || (direction > 0 && m_frame == m_out) ||
         (direction < 0 && m_frame == m_in))
@@ -330,7 +347,7 @@ void PlayerController::play(int direction) {
     emit playbackChanged();
 }
 void PlayerController::tick() {
-    if (!m_loaded || !m_playing || m_scrubRequests.isActive())
+    if (!m_loaded || !m_playing || m_scrubbing)
         return;
     const double elapsed = m_clock.elapsed() / 1000.;
     int next = m_anchor + int(std::floor(elapsed * m_info.fps * m_speed)) * m_direction;
@@ -352,11 +369,11 @@ void PlayerController::tick() {
         return;
     }
     if (next != m_requestedFrame)
-        requestFrame(next);
+        requestFrame(next, MediaWorker::RequestKind::Playback);
 }
-void PlayerController::requestFrame(int frame) {
+void PlayerController::requestFrame(int frame, MediaWorker::RequestKind kind) {
     m_requestedFrame = frame;
-    m_worker.seek(frame, m_transportEpoch, m_playing ? m_direction : m_scrubDirection);
+    m_worker.seek(frame, m_transportEpoch, m_playing && !m_scrubbing ? m_direction : m_scrubDirection, kind);
 }
 void PlayerController::seek(int frame, bool withAudio) {
     seek(frame, withAudio, false);
@@ -379,27 +396,37 @@ void PlayerController::seek(int frame, bool withAudio, bool preservePlayback) {
         emit positionChanged();
     }
     if (withAudio) {
-        if (m_playing && !m_scrubRequests.isActive()) {
-            // Keep the transport playing, but stop old audio/results until the
-            // coalesced timeline target is committed and the clock is rebased.
+        if (!m_scrubbing) {
+            // Start one preview session, rather than cancelling the decoder at
+            // every batch. The worker keeps only the latest pending target.
+            m_scrubbing = true;
             ++m_transportEpoch;
             m_audio.stop();
         }
         m_requestedFrame = value;
+        m_scrubSettle.start();
         if (!m_scrubRequests.isActive())
             m_scrubRequests.start();
         return;
     }
     m_scrubRequests.stop();
+    m_scrubSettle.stop();
+    m_scrubbing = false;
     ++m_transportEpoch;
     requestFrame(value);
     if (m_playing)
         resetClock();
 }
+void PlayerController::flushScrub() {
+    if (m_loaded && m_scrubbing)
+        requestFrame(m_frame);
+}
 void PlayerController::finishScrub() {
     if (!m_loaded)
         return;
     m_scrubRequests.stop();
+    m_scrubSettle.stop();
+    m_scrubbing = false;
     ++m_transportEpoch;
     requestFrame(m_frame);
     if (m_playing)

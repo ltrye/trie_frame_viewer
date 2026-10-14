@@ -444,7 +444,7 @@ class CoreTests : public QObject {
         QList<QPair<int, QImage>> presented;
         connect(&player, &tfv::PlayerController::frameReady, this, [&](tfv::VideoFrame image) {
             if (!image.isNull())
-                presented.append({player.currentFrame(), image.toImage()});
+                presented.append({player.presentedFrame(), image.toImage()});
         });
         player.openMedia(QUrl::fromLocalFile(path));
         QTRY_VERIFY_WITH_TIMEOUT(player.loaded(), 5000);
@@ -516,6 +516,71 @@ class CoreTests : public QObject {
         player.finishScrub();
         QVERIFY(!player.playing());
         QCOMPARE(player.currentFrame(), 31);
+    }
+    void dragPreviewsKeepArrivingAndReleaseIsExact() {
+        const QString path = qEnvironmentVariable("TFV_STRESS_MEDIA");
+        if (path.isEmpty())
+            QSKIP("Generate the 1080p integration fixture with scripts/verify.ps1");
+        QTemporaryDir settings;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        tfv::Preferences preferences;
+        preferences.setCacheMiB(64);
+        preferences.setVolume(0);
+        tfv::PlayerController player(preferences);
+        tfv::Decoder expected;
+        QString error;
+        QVERIFY(expected.open(path, error));
+        int previews = 0;
+        bool dragging = false, released = false;
+        QList<QPair<int, tfv::VideoFrame>> samples;
+        QList<int> releasedIndices;
+        tfv::VideoFrame lastFrame;
+        connect(&player, &tfv::PlayerController::frameReady, this, [&](tfv::VideoFrame frame) {
+            if (frame.isNull())
+                return;
+            lastFrame = frame;
+            if (dragging) {
+                ++previews;
+                if (samples.size() < 3)
+                    samples.append({player.presentedFrame(), frame});
+            }
+            if (released)
+                releasedIndices.append(player.presentedFrame());
+        });
+        player.openMedia(QUrl::fromLocalFile(path));
+        QTRY_COMPARE_WITH_TIMEOUT(player.presentedFrame(), 0, 5000);
+        for (int pass = 0; pass < 2; ++pass) {
+            previews = 0;
+            samples.clear();
+            releasedIndices.clear();
+            released = false;
+            dragging = true;
+            QElapsedTimer sweep;
+            sweep.start();
+            while (sweep.elapsed() < 1000) {
+                const double progress = sweep.elapsed() / 1000.;
+                const int target = int((pass == 0 ? progress : 1 - progress) * (player.frameCount() - 1));
+                player.seek(target, true);
+                QTest::qWait(8);
+                QCOMPARE(player.currentFrame(), target);
+            }
+            dragging = false;
+            QVERIFY2(previews >= 2, "Continuous dragging must present frames before release");
+            const int target = 63 + pass * 74;
+            player.seek(target, true);
+            released = true;
+            player.finishScrub();
+            QTRY_VERIFY_WITH_TIMEOUT(!releasedIndices.isEmpty() && player.presentedFrame() == target, 5000);
+            QCOMPARE(lastFrame.toImage(), expected.frame(target, error));
+            QTest::qWait(150);
+            for (const int index : releasedIndices)
+                QCOMPARE(index, target);
+            for (const auto& [index, frame] : samples)
+                QCOMPARE(frame.toImage(), expected.frame(index, error));
+            QVERIFY(!player.playing());
+            QVERIFY(player.cacheUsedMiB() <= 64.);
+        }
     }
     void singleFrameLoopDoesNotLeaveTheClockPastItsRange() {
         const QString path = qEnvironmentVariable("TFV_TEST_MEDIA");

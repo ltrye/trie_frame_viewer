@@ -22,6 +22,7 @@ void MediaWorker::open(const QString& path, quint64 generation, qint64 budget, q
         m_openPending = true;
         m_requested = 0;
         m_direction = 1;
+        m_requestKind = RequestKind::Seek;
         m_epoch = 0;
         m_audioBudget = audioBudget;
         m_budget = budget;
@@ -30,11 +31,12 @@ void MediaWorker::open(const QString& path, quint64 generation, qint64 budget, q
     }
     m_wake.notify_one();
 }
-void MediaWorker::seek(int index, quint64 epoch, int direction) {
+void MediaWorker::seek(int index, quint64 epoch, int direction, RequestKind kind) {
     {
         std::lock_guard lock(m_mutex);
         m_requested = index;
         m_direction = direction < 0 ? -1 : 1;
+        m_requestKind = kind;
         m_epoch = epoch;
         m_requestRevision.fetch_add(1);
     }
@@ -115,6 +117,7 @@ void MediaWorker::run(std::stop_token stop) {
         int requested = -1;
         qint64 audioBudget = 0;
         quint64 epoch = 0, requestRevision = 0;
+        RequestKind requestKind = RequestKind::Seek;
         {
             std::unique_lock lock(m_mutex);
             if (!m_openPending && m_requested < 0 && (!prefilling || !valid))
@@ -135,6 +138,7 @@ void MediaWorker::run(std::stop_token stop) {
             requested = m_requested;
             m_requested = -1;
             direction = m_direction;
+            requestKind = m_requestKind;
             epoch = m_epoch;
             requestRevision = m_requestRevision;
         }
@@ -204,13 +208,15 @@ void MediaWorker::run(std::stop_token stop) {
             anchor = std::clamp(requested, 0, decoder.info().frameCount - 1);
             planWindow();
             auto cancelled = [&]() {
-                // Playback requests share an epoch so a slightly late decoded
-                // frame can still be presented. A new user seek cancels it.
+                // Playback and drag previews share their session's epoch. A
+                // release/exact seek or transport/source change invalidates it.
                 return sourceCancelled() || epoch != m_epoch;
             };
             QString error;
             auto image = cache.get(anchor);
-            if (image.isNull())
+            if (image.isNull() && requestKind == RequestKind::Playback && direction < 0)
+                // Reverse playback benefits from retaining the preceding GOP.
+                // Interactive seeks must not wait for these copies/downloads.
                 image = decoder.videoFrame(
                     anchor, error, cancelled,
                     [&](int index, const VideoFrame& frame) {
@@ -218,6 +224,8 @@ void MediaWorker::run(std::stop_token stop) {
                             cache.insert(index, frame, anchor);
                     },
                     [&](int index) { return index >= first && index <= last && !cache.contains(index); });
+            else if (image.isNull())
+                image = decoder.videoFrame(anchor, error, cancelled);
             if (cancelled())
                 continue;
             if (!image.isNull()) {
