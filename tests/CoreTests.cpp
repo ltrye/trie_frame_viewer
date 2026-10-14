@@ -15,6 +15,42 @@
 class CoreTests : public QObject {
     Q_OBJECT
   private slots:
+    void volumeChangesAreIsolatedAndPersistAfterDraggingOrClosing() {
+        QTemporaryDir settings;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        {
+            tfv::Preferences preferences;
+            QSignalSpy volume(&preferences, &tfv::Preferences::volumeChanged);
+            QSignalSpy cache(&preferences, &tfv::Preferences::cacheChanged);
+            QSignalSpy gpu(&preferences, &tfv::Preferences::gpuCacheChanged);
+            QSignalSpy decoder(&preferences, &tfv::Preferences::decoderChanged);
+            QSignalSpy shortcuts(&preferences, &tfv::Preferences::shortcutsChanged);
+            QSignalSpy theme(&preferences, &tfv::Preferences::themeChanged);
+            QSignalSpy debug(&preferences, &tfv::Preferences::debugModeChanged);
+            QSettings saved;
+            const QVariant initial = saved.value("volume");
+            for (int step = 0; step < 200; ++step)
+                preferences.setVolume((step % 101) / 100.);
+            preferences.setVolume(0.37);
+            QCOMPARE(preferences.volume(), 0.37);
+            QVERIFY(!volume.isEmpty());
+            const int changes = volume.count();
+            preferences.setVolume(0.37);
+            QCOMPARE(volume.count(), changes);
+            QVERIFY(cache.isEmpty() && gpu.isEmpty() && decoder.isEmpty() && shortcuts.isEmpty() &&
+                    theme.isEmpty() && debug.isEmpty());
+            QCOMPARE(saved.value("volume"), initial);
+            QTRY_COMPARE_WITH_TIMEOUT(saved.value("volume").toDouble(), 0.37, 1000);
+            preferences.setVolume(0.24); // Closing before the debounce must keep the final value.
+        }
+        tfv::Preferences reopened;
+        QCOMPARE(reopened.volume(), 0.24);
+        reopened.toggleMute();
+        QCOMPARE(reopened.volume(), 0.);
+        reopened.toggleMute();
+        QCOMPARE(reopened.volume(), 0.24);
+    }
     void cinemaShortcutsMigrateTheOldFullscreenDefault() {
         const QList<QPair<QString, QString>> shortcuts{{"F11", ""}, {"F12", ""}, {"F11", "Ctrl+F11"}};
         for (const auto& [fullscreen, cinema] : shortcuts) {

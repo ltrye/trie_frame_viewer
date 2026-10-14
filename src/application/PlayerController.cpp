@@ -10,7 +10,6 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
     : QObject(parent), m_preferences(preferences), m_bookmarks(this), m_worker(this), m_audio(this) {
     qRegisterMetaType<MediaInfo>();
     qRegisterMetaType<VideoFrame>();
-    m_lastVolume = m_preferences.volume();
     applyDecodePreferences();
     m_scrubRequests.setSingleShot(true);
     m_scrubRequests.setTimerType(Qt::PreciseTimer);
@@ -32,14 +31,11 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
     });
     m_autosave.start();
     connect(&m_bookmarks, &BookmarkModel::edited, this, &PlayerController::markDirty);
-    connect(&m_preferences, &Preferences::changed, this, [this] {
-        m_worker.setBudget(qint64(m_preferences.cacheMiB()) * 1048576);
-        applyDecodePreferences();
-        m_audio.setVolume(m_preferences.volume());
-        if (m_playing && m_lastVolume <= 0 && m_preferences.volume() > 0)
-            resetClock();
-        m_lastVolume = m_preferences.volume();
-    });
+    connect(&m_preferences, &Preferences::cacheChanged, this,
+            [this] { m_worker.setBudget(qint64(m_preferences.cacheMiB()) * 1048576); });
+    connect(&m_preferences, &Preferences::decoderChanged, this, &PlayerController::applyDecodePreferences);
+    connect(&m_preferences, &Preferences::volumeChanged, this,
+            [this] { m_audio.setVolume(m_preferences.volume()); });
     connect(&m_worker, &MediaWorker::opened, this, [this](quint64 gen, MediaInfo info) {
         if (gen != m_generation)
             return;

@@ -223,6 +223,11 @@ silent.
 
 Stopping discards the `QAudioSink`; restarting creates a fresh sink. This prevents
 stale Windows audio buffers from breaking repeated seek/play/scrub cycles.
+Volume changes update PCM gain with a ramp of up to 5 ms instead of calling native
+device-volume setters on every slider movement. Continuous playback keeps its sink
+and audio clock running while muted, so unmuting does not restart playback. Silent
+scrub snippets skip opening a device. Volume notifications are isolated from cache,
+decoder, menu, and shortcut updates; settings saves wait for 250 ms of quiet input.
 The PCM cache is not a sliding window: beyond its cached beginning, audio is
 unavailable. At the default format, 64 MiB holds roughly 5 minutes 50 seconds.
 

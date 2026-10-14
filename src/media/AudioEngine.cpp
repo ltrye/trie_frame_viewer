@@ -30,9 +30,9 @@ void AudioEngine::stop() {
     m_sink.reset();
 }
 void AudioEngine::setVolume(double v) {
-    m_scrubVolume = v;
-    if (m_sink)
-        m_sink->setVolume(float(v));
+    if (!std::isfinite(v))
+        return;
+    m_scrubVolume = m_targetVolume = std::clamp(v, 0., 1.);
 }
 bool AudioEngine::clockAvailable() const {
     return m_sink && m_device && !m_scrubbing && m_sink->state() == QAudio::ActiveState;
@@ -53,7 +53,12 @@ void AudioEngine::scrub(double seconds, int milliseconds, double volume) {
 }
 void AudioEngine::start(double seconds, double speed, double volume, int limitMilliseconds) {
     stop();
-    if (m_pcm.isEmpty() || volume <= 0 || seconds < 0 || seconds * 48000 >= m_pcm.size() / 4)
+    if (!std::isfinite(volume))
+        volume = 0;
+    // Continuous playback keeps its device and clock alive through mute/unmute.
+    // Silent scrub snippets do not need to open an output device.
+    if (m_pcm.isEmpty() || (volume <= 0 && limitMilliseconds >= 0) || seconds < 0 ||
+        seconds * 48000 >= m_pcm.size() / 4)
         return;
     if (!m_sink) {
         QAudioFormat format;
@@ -72,7 +77,11 @@ void AudioEngine::start(double seconds, double speed, double volume, int limitMi
     m_emitted = 0;
     m_scrubbing = limitMilliseconds >= 0;
     m_limitSamples = m_scrubbing ? limitMilliseconds * 48 : -1;
-    m_sink->setVolume(float(volume));
+    setVolume(volume);
+    m_volume = 0;
+    // Apply user gain in PCM, avoiding synchronous Windows volume updates for
+    // every pointer movement. A short ramp suppresses discontinuities/clicks.
+    m_sink->setVolume(1);
     m_device = m_sink->start();
     if (!m_device)
         return;
@@ -97,13 +106,16 @@ void AudioEngine::feed() {
     QByteArray bytes(samples * 4, Qt::Uninitialized);
     auto* output = reinterpret_cast<qint16*>(bytes.data());
     const auto* input = reinterpret_cast<const qint16*>(m_pcm.constData());
+    constexpr double volumeStep = 1. / 240; // Full-scale ramp over 5 ms at 48 kHz.
+    double volume = m_volume;
     for (qint64 n = 0; n < samples; ++n) {
         const double position = m_cursor + n * m_speed;
         const qint64 i = qint64(position);
         const double fraction = position - i;
-        double gain = 1;
+        volume += std::clamp(m_targetVolume - volume, -volumeStep, volumeStep);
+        double gain = volume;
         if (m_scrubbing)
-            gain = std::min({1., double(m_emitted + n) / 240, double(m_limitSamples - m_emitted - n) / 240});
+            gain *= std::min({1., double(m_emitted + n) / 240, double(m_limitSamples - m_emitted - n) / 240});
         for (int ch = 0; ch < 2; ++ch)
             output[n * 2 + ch] =
                 qint16((input[i * 2 + ch] * (1 - fraction) + input[(i + 1) * 2 + ch] * fraction) * gain);
@@ -112,6 +124,8 @@ void AudioEngine::feed() {
     if (written <= 0)
         return;
     const qint64 accepted = written / 4;
+    // Advance gain only for accepted samples if the output buffer filled.
+    m_volume += std::clamp(m_targetVolume - m_volume, -accepted * volumeStep, accepted * volumeStep);
     m_cursor += accepted * m_speed;
     m_emitted += accepted;
 }

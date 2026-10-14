@@ -62,6 +62,11 @@ bookmark IDs so removing another marker cannot redirect a pending edit. The cont
 validates frame edits against the loaded media; names and changes remain in the domain
 model and persist in `.tfv` projects. There is no bookmark sidebar or range-bookmark action.
 
+Preferences uses separate notification signals for volume, cache budgets, decoding,
+theme, debug mode, and shortcuts. Dragging volume updates only audio gain and its UI
+bindings; it does not rebuild command models or reconfigure the video worker. Volume
+persists after 250 ms without another change, with a final flush on shutdown.
+
 ## Threads and ownership
 
 - The GUI thread owns PlayerController, BookmarkModel, Preferences, and AudioEngine.

@@ -32,6 +32,7 @@ class AudioEngine final : public QObject {
     double m_scrubSeconds = 0, m_scrubVolume = 0;
     int m_scrubMilliseconds = 0;
     double m_cursor = 0, m_originSeconds = 0, m_speed = 1;
+    double m_volume = 0, m_targetVolume = 0;
     qint64 m_emitted = 0, m_limitSamples = -1;
     bool m_scrubbing = false;
 };

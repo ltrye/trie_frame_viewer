@@ -202,7 +202,6 @@ class PlayerController final : public QObject {
     int m_requestedFrame = 0;
     int m_scrubDirection = 1;
     int m_presentedFrame = -1;
-    double m_lastVolume = 0;
     int m_frame = 0, m_anchor = 0, m_in = 0, m_out = 0, m_direction = 1, m_rotation = 0, m_audioOffset = 0;
     double m_speed = 1, m_zoom = 1, m_panX = 0, m_panY = 0;
     bool m_scrubbing = false;

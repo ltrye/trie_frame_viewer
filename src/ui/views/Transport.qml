@@ -168,6 +168,7 @@ Item {
             onClicked: preferences.toggleMute()
         }
         ValueSlider {
+            objectName: "volumeSlider"
             Layout.preferredWidth: 70
             from: 0
             to: 1

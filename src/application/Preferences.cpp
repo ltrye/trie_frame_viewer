@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <algorithm>
+#include <cmath>
 
 static void initializeDefaultResources() {
     Q_INIT_RESOURCE(tfv_defaults);
@@ -15,6 +16,12 @@ Preferences::Preferences(QObject* parent) : QObject(parent) {
     if (!file.open(QIODevice::ReadOnly))
         qFatal("Missing defaults.json resource");
     m_defaults = QJsonDocument::fromJson(file.readAll()).object();
+    const double savedVolume = m_settings.value("volume", m_defaults.value("volume").toDouble()).toDouble();
+    m_volume =
+        std::isfinite(savedVolume) ? std::clamp(savedVolume, 0., 1.) : m_defaults.value("volume").toDouble();
+    m_volumeSave.setSingleShot(true);
+    m_volumeSave.setInterval(integer("volumeSaveDelayMs"));
+    connect(&m_volumeSave, &QTimer::timeout, this, [this] { m_settings.setValue("volume", m_volume); });
     if (!m_settings.value("migrations/cinemaModeShortcut", false).toBool()) {
         QString cinemaDefault;
         for (const auto& entry : m_defaults.value("actions").toArray()) {
@@ -32,6 +39,10 @@ Preferences::Preferences(QObject* parent) : QObject(parent) {
         }
         m_settings.setValue("migrations/cinemaModeShortcut", true);
     }
+}
+Preferences::~Preferences() {
+    if (m_volumeSave.isActive())
+        m_settings.setValue("volume", m_volume);
 }
 int Preferences::integer(const QString& key) const {
     return m_defaults.value(key).toInt();
@@ -56,24 +67,30 @@ QVariantList Preferences::decodeOptions() const {
 }
 void Preferences::setGpuCacheMiB(int value) {
     const auto limits = cacheLimits();
-    m_settings.setValue("gpuCacheMiB", std::clamp(value, limits["gpuMin"].toInt(), limits["gpuMax"].toInt()));
-    emit changed();
+    value = std::clamp(value, limits["gpuMin"].toInt(), limits["gpuMax"].toInt());
+    if (value == gpuCacheMiB())
+        return;
+    m_settings.setValue("gpuCacheMiB", value);
+    emit gpuCacheChanged();
 }
 void Preferences::setDecoderThreads(int value) {
-    m_settings.setValue("decoderThreads", std::clamp(value, 1, 16));
-    emit changed();
+    value = std::clamp(value, 1, 16);
+    if (value == decoderThreads())
+        return;
+    m_settings.setValue("decoderThreads", value);
+    emit decoderChanged();
 }
 void Preferences::setDecodeMode(const QString& value) {
     bool valid = false;
     for (const auto& option : decodeOptions())
         valid = valid || option.toMap()["id"].toString() == value;
-    if (!valid)
+    if (!valid || value == decodeMode())
         return;
     m_settings.setValue("decodeMode", value);
-    emit changed();
+    emit decoderChanged();
 }
 double Preferences::volume() const {
-    return m_settings.value("volume", m_defaults.value("volume").toDouble()).toDouble();
+    return m_volume;
 }
 QString Preferences::theme() const {
     return m_settings.value("theme", m_defaults.value("theme").toString()).toString();
@@ -85,22 +102,31 @@ void Preferences::setDebugMode(bool enabled) {
     if (debugMode() == enabled)
         return;
     m_settings.setValue("debugMode", enabled);
-    emit changed();
+    emit debugModeChanged();
 }
 void Preferences::setCacheMiB(int v) {
     const auto limits = cacheLimits();
-    m_settings.setValue("cacheMiB", std::clamp(v, limits["videoMin"].toInt(), limits["videoMax"].toInt()));
-    emit changed();
+    v = std::clamp(v, limits["videoMin"].toInt(), limits["videoMax"].toInt());
+    if (v == cacheMiB())
+        return;
+    m_settings.setValue("cacheMiB", v);
+    emit cacheChanged();
 }
 void Preferences::setVolume(double v) {
-    m_settings.setValue("volume", std::clamp(v, 0., 1.));
-    emit changed();
+    if (!std::isfinite(v))
+        return;
+    v = std::clamp(v, 0., 1.);
+    if (v == m_volume)
+        return;
+    m_volume = v;
+    m_volumeSave.start();
+    emit volumeChanged();
 }
 void Preferences::setTheme(const QString& v) {
-    if (v != "dark" && v != "light")
+    if ((v != "dark" && v != "light") || v == theme())
         return;
     m_settings.setValue("theme", v);
-    emit changed();
+    emit themeChanged();
 }
 QVariantList Preferences::actions() const {
     QVariantList result;
@@ -121,13 +147,13 @@ void Preferences::setShortcut(const QString& id, const QString& value) {
     for (const auto& a : actions())
         if (a.toMap()["id"] == id) {
             m_settings.setValue("shortcuts/" + id, value);
-            emit changed();
+            emit shortcutsChanged();
             return;
         }
 }
 void Preferences::resetShortcuts() {
     m_settings.remove("shortcuts");
-    emit changed();
+    emit shortcutsChanged();
 }
 QVariantList Preferences::playbackSpeeds() const {
     return m_defaults.value("playbackSpeeds").toArray().toVariantList();

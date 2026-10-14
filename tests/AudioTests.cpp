@@ -45,6 +45,23 @@ class AudioTests : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(audio.clockAvailable(), 800);
         QTRY_VERIFY_WITH_TIMEOUT(audio.seconds() > 0.12, 800);
     }
+    void volumeAndMuteChangesKeepThePlaybackClockContinuous() {
+        tfv::AudioEngine audio;
+        audio.load(pcm());
+        audio.play(0, 1, 0);
+        QTRY_VERIFY_WITH_TIMEOUT(audio.clockAvailable(), 800);
+        QTRY_VERIFY_WITH_TIMEOUT(audio.seconds() > 0.08, 800);
+        double previous = audio.seconds();
+        for (int step = 0; step < 80; ++step) {
+            audio.setVolume(step % 9 == 0 ? 0 : (step % 5) * 0.005);
+            QTest::qWait(4);
+            QVERIFY(audio.clockAvailable());
+            QVERIFY(audio.seconds() >= previous);
+            previous = audio.seconds();
+        }
+        audio.setVolume(0.02);
+        QTRY_VERIFY_WITH_TIMEOUT(audio.seconds() > previous + 0.08, 800);
+    }
 };
 
 int main(int argc, char** argv) {

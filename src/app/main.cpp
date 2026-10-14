@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
     tfv::PlayerController player(preferences);
     tfv::ResourceMonitor resourceMonitor(preferences.integer("debugRefreshIntervalMs"));
     resourceMonitor.setEnabled(preferences.debugMode());
-    QObject::connect(&preferences, &tfv::Preferences::changed, &resourceMonitor,
+    QObject::connect(&preferences, &tfv::Preferences::debugModeChanged, &resourceMonitor,
                      [&] { resourceMonitor.setEnabled(preferences.debugMode()); });
     tfv::WindowsIntegration windowsIntegration;
     QQmlApplicationEngine engine;

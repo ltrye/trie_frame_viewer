@@ -2,9 +2,11 @@
 #include "application/PlayerController.h"
 #include "platform/ResourceMonitor.h"
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
 #include <QJsonDocument>
+#include <QPointer>
 #include <QQmlListReference>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -383,6 +385,61 @@ static bool debugUiSmoke(QQuickWindow& window, tfv::Preferences& preferences, co
     return valid;
 }
 
+static bool volumeUiSmoke(QQuickWindow& window, tfv::PlayerController& player, tfv::Preferences& preferences,
+                          QJsonObject& report) {
+    auto* slider = window.findChild<QQuickItem*>("volumeSlider");
+    QPointer<QQuickItem> command = window.findChild<QQuickItem*>("menu_cinemaMode");
+    auto* audio = player.findChild<tfv::AudioEngine*>();
+    if (!slider || !slider->isEnabled() || !command || !audio)
+        return false;
+    const double originalVolume = preferences.volume();
+    const double originalSpeed = player.speed();
+    slider->setProperty("to", 0.04); // Keep the native playback test quiet.
+    preferences.setVolume(0.02);
+    player.setSpeed(1);
+    player.seek(4); // Leave enough of the short fixture range to avoid a loop during this check.
+    player.execute("forward");
+    QTest::qWait(150);
+    QSignalSpy positions(&player, &tfv::PlayerController::positionChanged);
+    const auto point = [&](double fraction) {
+        return slider->mapToScene({8 + fraction * (slider->width() - 16), slider->height() / 2}).toPoint();
+    };
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, point(0.5));
+    bool retained = true;
+    qint64 maxHandlerUs = 0;
+    for (int step = 0; step < 40; ++step) {
+        QElapsedTimer handler;
+        handler.start();
+        QTest::mouseMove(&window, point((step % 11) / 10.), 0);
+        maxHandlerUs = std::max(maxHandlerUs, handler.nsecsElapsed() / 1000);
+        QTest::qWait(8);
+        retained = retained && command && window.findChild<QQuickItem*>("menu_cinemaMode") == command;
+    }
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, point(0.7));
+    const bool changed = preferences.volume() > 0.025 && preferences.volume() < 0.035;
+    const double beforeMute = audio->seconds();
+    preferences.setVolume(0);
+    QTest::qWait(40);
+    preferences.setVolume(0.02);
+    QTest::qWait(40);
+    const bool continuous = audio->clockAvailable() && audio->seconds() >= beforeMute;
+    report["volumeAudioSecondsBeforeMute"] = beforeMute;
+    report["volumeAudioSecondsAfterUnmute"] = audio->seconds();
+    report["volumeAudioActiveAfterUnmute"] = audio->clockAvailable();
+    const bool advanced = player.playing() && positions.count() > 2;
+    report["volumeDragMaxHandlerMs"] = maxHandlerUs / 1000.;
+    report["volumeDragRetainsMenuObjects"] = retained;
+    report["volumeDragUpdatesGain"] = changed;
+    report["volumeDragPlaybackAdvances"] = advanced;
+    report["muteKeepsAudioClock"] = continuous;
+    player.execute("pause");
+    player.setSpeed(originalSpeed);
+    player.seek(24);
+    slider->setProperty("to", 1);
+    preferences.setVolume(originalVolume);
+    return retained && changed && continuous && advanced;
+}
+
 static bool cinemaUiSmoke(QQuickWindow& window, tfv::PlayerController& player, const QString& directory,
                           QJsonObject& report) {
     auto* stage = visualItem(window.contentItem(), "reviewStage");
@@ -539,6 +596,9 @@ static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Prefe
     QTimer::singleShot(300, &app, [&, directory, report, valid] {
         *valid = window.grabWindow().save(directory + "/review-final.png") && *valid;
         auto* player = qobject_cast<tfv::PlayerController*>(window.property("player").value<QObject*>());
+        const bool volumeValid = player && volumeUiSmoke(window, *player, preferences, *report);
+        (*report)["volumeDragResponsive"] = volumeValid;
+        *valid = volumeValid && *valid;
         const bool cinemaValid = player && cinemaUiSmoke(window, *player, directory, *report);
         (*report)["cinemaMode"] = cinemaValid;
         *valid = cinemaValid && *valid;
