@@ -1,0 +1,261 @@
+# Trie FrameViewer: caching and scrubbing
+
+Implementation summary checked against the application source on 2026-10-14.
+The current design uses bounded decoded-frame caching, background prefetch, and
+coalesced seek requests. It does not preload every video into a compressed,
+whole-clip RAM or VRAM cache.
+
+## 1. Data flow and ownership
+
+```mermaid
+flowchart LR
+    Input[Timeline drag or viewer right-drag] --> Controller[PlayerController: latest target]
+    Controller -->|Coalesced video requests| Worker[MediaWorker: video worker thread]
+    Worker --> RAM{Decoded frame in RAM?}
+    RAM -->|Yes| Present[Validate generation and epoch]
+    RAM -->|No| Decoder[FFmpeg: seek and decode]
+    Decoder --> Cache[Cache target and useful intermediate frames]
+    Cache --> Present
+    Present --> Renderer[VideoItem / YuvNode: render thread]
+    Renderer --> GPU[Reuse or upload GPU textures]
+    Controller --> Audio[AudioEngine: coalesced audio snippets]
+```
+
+- **GUI thread:** QML gestures, playback state, request scheduling, and audio output.
+- **Video worker:** one decoder and its RAM cache; decoding does not run in QML.
+- **Audio decode worker:** separately prepares PCM audio so it does not occupy the
+  video seek/prefetch worker.
+- **Render thread:** uploads textures, manages the YUV texture cache, and draws.
+
+`VideoFrame` shares immutable, owned pixel data between these components. Passing
+a frame between threads does not require another full pixel copy. An initial
+copy from the decoder's buffers gives the cache independent ownership.
+
+## 2. The three caches
+
+| Cache | Default budget | Contents | Purpose |
+|---|---:|---|---|
+| Video RAM | 512 MiB | Decoded YUV420 planes, or RGBA8 fallback frames | Avoid decoding a retained frame again |
+| GPU textures | 64 MiB | Y/U/V textures for recently displayed YUV frames | Avoid uploading the same retained frame again |
+| Audio RAM | 64 MiB | Decoded 48 kHz, stereo, signed 16-bit PCM | Playback and short scrub previews |
+
+These are separate budgets, not a cap on total process RAM or total VRAM.
+FFmpeg buffers, the current presentation frame, in-flight work, Qt/QML, temporary
+conversions, and graphics-driver allocations add memory beyond them. Caches are
+transient; saving a `.tfv` project saves review metadata, not cached pixels/audio.
+
+### Compact video storage
+
+Common 8-bit YUV420P, YUVJ420P, and NV12 video is copied into tightly packed Y/U/V
+planes. NV12's interleaved chroma is separated into U and V. Color-matrix and
+full/limited-range metadata travel with the frame. Other video formats and image
+sequences use an RGBA8 representation.
+
+Frames retain their decoded source resolution. Pan, zoom, rotation, and flipping
+are display transforms; they do not create separate cached frame versions.
+
+For even-sized frames:
+
+```text
+YUV420 bytes/frame = width × height × 1.5
+RGBA8 bytes/frame  = width × height × 4
+```
+
+YUV420 therefore uses 62.5% fewer pixel bytes than RGBA8. For odd dimensions, the
+exact planar size is `width × height + 2 × ceil(width/2) × ceil(height/2)`.
+
+At 1280 × 720, one YUV420 frame is about 1.32 MiB. A 512 MiB cache holds about
+388 such frames. A 271-frame clip needs about 357 MiB and can become fully cached;
+4,000 frames need about 5.15 GiB and cannot all fit in that budget. These are pixel
+storage calculations, not total application-memory measurements.
+
+### RAM eviction
+
+`FrameCache` combines a frame-index map with a least-recently-used (LRU) list.
+Reads and inserts move a frame to the recently used end. Under budget pressure:
+
+1. Evict the oldest frame outside the preferred playhead window, avoiding the
+   current anchor when possible.
+2. If necessary, evict older frames inside the window too.
+3. A single frame larger than the budget is not retained in this cache.
+
+Moving the playhead changes eviction priority; it does not immediately discard
+previously visited regions. Small clips can fill completely in the background.
+Opening another source clears the RAM cache.
+
+### GPU texture reuse
+
+The YUV render path uses a separate LRU keyed by each `VideoFrame`'s unique
+identity. Reusing that same frame reuses its textures. New textures upload the
+planes, release their temporary upload-byte references, and use a shader for
+YUV-to-RGB conversion. The shader supports BT.601, BT.709, and BT.2020 matrices
+with full/limited range.
+
+The current YUV frame's textures remain resident even with a zero GPU-cache
+budget. Budget accounting counts plane pixels, not all driver allocations.
+The RGBA/software fallback uses a different display path without this multi-frame
+YUV texture LRU.
+
+The video worker does not look up missing RAM frames in VRAM. If a frame was
+evicted from RAM and is decoded again, its new identity does not reuse the old
+identity's GPU-cache entry.
+
+## 3. Opening media and background prefetch
+
+Opening a source resets the previous transport/cache state. The worker opens the
+decoder, decodes frame zero, publishes it, starts separate audio decoding, and
+plans a prefetch window using the first frame's byte size:
+
+```text
+capacity = clamp(floor(RAM budget / frame bytes), 1, clip frame count)
+```
+
+The window follows the latest requested frame and direction. Away from clip
+boundaries, forward movement allocates roughly one quarter behind the anchor and
+three quarters ahead; reverse movement swaps that bias.
+
+- **Forward:** fill after the anchor first, then the earlier part of the window.
+- **Reverse:** fill the earlier part first, then the later part.
+- Both passes decode in **ascending frame order**, including reverse lookbehind,
+  to avoid repeatedly seeking backward through the same compressed-video group.
+- Already cached candidates are skipped. Useful intermediate frames decoded on
+  the way to a target are also retained when they belong to the current window.
+- Foreground requests take priority. Prefetch waits for an 80 ms quiet period
+  after requested-frame work and is cancelled/superseded by newer requests.
+
+The preferred window currently follows position and direction, not the playback
+Start/End range. Timeline cache marks represent contiguous **RAM-cached** frame
+ranges; they do not indicate GPU residency. Coverage updates are generally
+throttled to about 100 ms, with immediate updates at some state transitions.
+
+## 4. Scrubbing input and scheduling
+
+### Timeline and viewer gestures
+
+Timeline clicks/drags map horizontal position proportionally across the entire
+clip, round to a frame, and clamp to valid bounds. Dragging through a bookmark
+uses the same scrub path.
+
+Right-dragging in the viewer starts from the frame and mouse position at press:
+
+```text
+pixelsPerFrame = baseSensitivity × (1 + abs(verticalDistance) / 80)
+targetFrame = originFrame + round(horizontalDistance / pixelsPerFrame)
+```
+
+The default base is 3 pixels/frame, or 12 while holding Shift. Moving vertically
+away from the press point increases precision. The calculation remains relative
+to the original press position. Scrubbing pauses playback; middle-drag pans.
+
+### Latest target wins
+
+`PlayerController.seek(frame, true)` updates the selected frame number immediately
+and records the latest target. A single-shot 16 ms timer batches drag requests.
+New mouse events update the target without restarting an already running timer,
+so this does not wait for the user to stop moving before issuing work.
+
+On a timer tick, `finishScrub()` requests the latest target. Mouse release also
+calls it immediately to finalize the target without waiting for the next batch.
+The frame number can update before the corresponding pixels arrive: decoding
+and presentation remain asynchronous.
+
+`MediaWorker` keeps one pending target, overwriting it with newer requests instead
+of queuing every intermediate mouse position. It checks RAM first; a miss invokes
+FFmpeg and retains useful intermediate frames. No synthetic in-between frames
+are generated.
+
+## 5. Seeking compressed video and rejecting stale results
+
+The decoder can continue forward without flushing for jumps of up to 256 frames
+when its state permits. Backward jumps, larger forward jumps, decoder draining,
+or a previous cancelled decode require a seek/flush. It seeks backward using
+FFmpeg, then decodes forward from the seek point toward the target. A long GOP
+(the keyframe/dependent-frame group) can make a cache miss expensive.
+
+Frame indices are derived from timestamps and nominal FPS. Final-target requests
+are exact requests in this indexing model; the player does not yet maintain a
+complete ordinal/timestamp index for arbitrary variable-frame-rate video.
+
+Three kinds of identifiers prevent obsolete work from taking over the viewer:
+
+| Identifier | What it controls |
+|---|---|
+| Source generation/revision | Discard results and cancel work belonging to an older source |
+| Transport epoch | Invalidate earlier seeks or playback sessions when transport changes |
+| Request revision | Supersede the pending target and cancel speculative prefetch |
+
+While paused, the controller accepts decoded results only for the latest target
+and valid source/epoch. During playback, requests can share an epoch so completed
+frames may still advance in the playback direction toward the latest clock
+target. Cancelling on every playback tick would otherwise starve presentation.
+After a cancelled decode, the decoder forces a fresh seek because the demuxer may
+have advanced past its last successfully returned frame.
+
+Normal playback uses the same worker/cache. A 4 ms controller timer computes the
+desired frame from elapsed time, FPS, direction, and speed; forward playback uses
+the active audio clock when available. The timer is a scheduling cadence, not a
+guarantee of one new displayed frame every 4 ms.
+
+## 6. Audio scrubbing
+
+Audio is decoded from the beginning into a bounded PCM buffer. Each finalized
+scrub request schedules a 70 ms preview near the selected frame, adjusted by the
+project's audio offset. `AudioEngine` coalesces these requests over 20 ms and uses
+the latest position. Snippets play forward at normal speed even during backward
+scrubbing, with short fades to reduce clicks. Continuous reverse playback is
+silent.
+
+Stopping discards the `QAudioSink`; restarting creates a fresh sink. This prevents
+stale Windows audio buffers from breaking repeated seek/play/scrub cycles.
+The PCM cache is not a sliding window: beyond its cached beginning, audio is
+unavailable. At the default format, 64 MiB holds roughly 5 minutes 50 seconds.
+
+## 7. Hardware decode and current limits
+
+- Auto mode attempts D3D11VA for supported video with at least 2,073,600 pixels
+  (1920 × 1080). Smaller clips use software decoding; video defaults to two decoder
+  threads. Software/forced-hardware options are available, applied when media opens.
+- Hardware setup/initial-frame failure can fall back to software. Hardware frames
+  are downloaded into CPU memory and later uploaded for display. This is not a
+  zero-copy GPU pipeline, and higher VRAM use does not mean the entire clip is cached.
+- Fast scrubbing over uncached regions can still stutter because keyframe seeking,
+  decoding, GPU transfers, and uploads take time. Coalescing reduces wasted work;
+  it cannot eliminate that work or make a large clip fit in a small cache.
+- Cancellation is cooperative between decoder operations. A blocking FFmpeg file
+  open/read is not guaranteed to stop immediately.
+- Full-clip compressed/disk caching, proxy-resolution caching, direct GPU sharing,
+  playback-range-aware prefetch, and a sliding audio cache are not implemented.
+- Exact VFR indexing and HDR/OCIO review workflows remain outside the current design.
+
+## 8. Settings and code map
+
+Defaults live in `config/defaults.json`; exposed preferences may override them.
+
+| Setting | Default | Effect |
+|---|---:|---|
+| `cacheMiB` | 512 | Retained decoded-video pixel budget |
+| `gpuCacheMiB` | 64 | YUV texture-cache pixel budget |
+| `audioCacheMiB` | 64 | Decoded PCM budget |
+| `scrubIntervalMs` | 16 | Controller drag-request batching interval |
+| `prefetchDelayMs` | 80 | Quiet period before speculative decoding |
+| `scrubMilliseconds` | 70 | Audio preview duration |
+| `scrubPixelsPerFrame` | 3 | Normal viewer right-drag sensitivity |
+| `fineScrubPixelsPerFrame` | 12 | Shift-drag sensitivity |
+| `decoderThreads` | 2 | Requested video decoder thread count |
+| `decodeMode` | `auto` | Software/hardware selection policy |
+| `hardwareMinimumPixels` | 2,073,600 | Auto-mode hardware threshold |
+
+| Implementation | Responsibility |
+|---|---|
+| `src/ui/components/Timeline.qml`, `src/ui/views/Viewer.qml` | Pointer gestures and target calculation |
+| `src/application/PlayerController.cpp` | Coalescing, clocks, epochs, presentation acceptance |
+| `src/media/MediaWorker.cpp` | Latest-target scheduling, window planning, prefetch, cancellation |
+| `src/media/FrameCache.h` | RAM lookup, LRU eviction, cached ranges |
+| `src/media/Decoder.cpp`, `src/media/VideoFrame.cpp` | FFmpeg seeking, compact pixels, hardware transfer |
+| `src/presentation/VideoItem.cpp`, `src/presentation/YuvNode.cpp` | Texture reuse, upload, and display |
+| `src/media/AudioEngine.cpp` | PCM output and scrub snippets |
+
+Existing core, renderer, and audio tests cover cache eviction, cache refill,
+random/cancelled seeks, source changes, GPU color conversion/reuse, and repeated
+audio restarts. Historical generated-fixture measurements and their limitations
+are recorded in `docs/performance.md`; this summary adds no new benchmark results.

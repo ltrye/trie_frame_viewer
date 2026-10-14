@@ -82,6 +82,8 @@ the moving development asset. Qt is pinned to 6.8.3.
 See `docs/architecture.md` for ownership and extension rules, and
 `docs/project-format.md` for `.tfv` field meanings.
 See `docs/performance.md` for benchmark clips, measurements, and cache limits.
+See `docs/caching-and-scrubbing.md` for the cache layers, prefetch policy, seek
+scheduling, audio scrubbing, and current limitations.
 
 The FV app logo is an SVG with original vector letter outlines, without a font or
 embedded bitmap. Run `python scripts/generate_app_icon.py` to regenerate its SVG,
