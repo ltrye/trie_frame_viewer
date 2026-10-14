@@ -10,7 +10,6 @@ Item {
     required property var preferences
     required property var resourceMonitor
     property bool cinemaMode: false
-    property bool hideCursor: false
     signal openRequested
     clip: true
     Rectangle {
@@ -47,7 +46,7 @@ Item {
         property real originX: 0
         property real originY: 0
         property int originFrame: 0
-        cursorShape: viewer.hideCursor ? Qt.BlankCursor : pressedButtons & Qt.MiddleButton ? Qt.ClosedHandCursor : pressedButtons & Qt.RightButton ? Qt.SizeHorCursor : Qt.ArrowCursor
+        cursorShape: pressedButtons & Qt.MiddleButton ? Qt.ClosedHandCursor : pressedButtons & Qt.RightButton ? Qt.SizeHorCursor : Qt.ArrowCursor
         onPressed: mouse => {
             lastX = originX = mouse.x;
             lastY = originY = mouse.y;

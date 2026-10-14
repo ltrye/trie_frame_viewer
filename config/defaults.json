@@ -14,7 +14,6 @@
   "theme": "dark",
   "debugMode": false,
   "debugRefreshIntervalMs": 500,
-  "cinemaControlsTimeoutMs": 2000,
   "fineScrubPixelsPerFrame": 12,
   "scrubPixelsPerFrame": 3,
   "playbackSpeeds": [0.25, 0.5, 1, 1.5, 2, 4],

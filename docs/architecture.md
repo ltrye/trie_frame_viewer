@@ -48,10 +48,9 @@ their controller and preferences explicitly. There is no global QML context-prop
 dependency. The two singleton modules contain appearance and icon data only.
 
 ReviewStage owns one Viewer, Timeline, and Transport in both normal and Cinema Mode.
-In normal mode the viewer ends at the playback panel. In Cinema Mode the viewer
-fills the stage and the same panel is an overlay; its visibility never changes video
-geometry. Passive pointer handlers reveal the controls without taking scrub/pan
-gestures. The idle delay lives in defaults.json, while colors/fades use Theme.qml.
+The viewer ends at the playback panel in both modes, keeping the timeline and
+transport controls always visible below the video. Cinema Mode hides the menu,
+native title bar, and viewer tools without overlaying controls or using idle timers.
 Main owns fullscreen transitions and restores the previous window visibility.
 Cinema Mode is transient UI state and never changes project dirty/playback state.
 

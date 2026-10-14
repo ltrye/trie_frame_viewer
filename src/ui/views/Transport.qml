@@ -9,7 +9,6 @@ Item {
     required property var player
     required property var preferences
     readonly property bool popupOpen: loopMenu.visible || speedControl.popup.visible
-    readonly property bool interacting: popupOpen || currentFrameInput.activeFocus || startFrameInput.activeFocus || endFrameInput.activeFocus
     function closePopups() {
         loopMenu.close();
         speedControl.popup.close();
@@ -26,7 +25,6 @@ Item {
         }
         spacing: Theme.spaceSm
         FrameInput {
-            id: currentFrameInput
             objectName: "currentFrameField"
             label: qsTr("Current frame")
             enabled: player.loaded
@@ -44,7 +42,6 @@ Item {
             font.pixelSize: Theme.textBody
         }
         FrameInput {
-            id: startFrameInput
             objectName: "playbackStartField"
             label: qsTr("Start frame")
             enabled: player.loaded
@@ -65,7 +62,6 @@ Item {
             font.pixelSize: Theme.textBody
         }
         FrameInput {
-            id: endFrameInput
             objectName: "playbackEndField"
             label: qsTr("End frame")
             enabled: player.loaded

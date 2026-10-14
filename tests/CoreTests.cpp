@@ -30,7 +30,6 @@ class CoreTests : public QObject {
             QCOMPARE(preferences.shortcut("cinemaMode"), cinema.isEmpty() ? QString("F11") : cinema);
             QCOMPARE(preferences.shortcut("fullscreen"), migrate ? QString{} : fullscreen);
             QCOMPARE(preferences.shortcut("exitCinemaMode"), QString("Esc"));
-            QCOMPARE(preferences.cinemaControlsTimeoutMs(), 2000);
             tfv::Preferences reopened;
             QCOMPARE(reopened.shortcut("fullscreen"), preferences.shortcut("fullscreen"));
         }
