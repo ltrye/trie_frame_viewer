@@ -55,6 +55,38 @@ contains tools and optional components beyond this runtime payload. The installe
 has no signing certificate configured. Code-sign it and validate it on a clean
 Windows machine before claiming a signed/clean-machine-certified release.
 
+## GitHub releases
+
+Release assets live in GitHub Releases, outside Git history. The repository is
+private; invited collaborators must sign in to download the installer. Visibility
+is never changed by the publisher. `v1.0` remains the initial source baseline;
+versioned installer releases use the full application version, starting at `v1.0.0`.
+
+For a new release, update the CMake version and add `docs/releases/v<version>.md`.
+Commit the source and notes, rebuild/test the installer, create an annotated tag
+at that commit, and push the branch and tag. For example:
+
+```powershell
+python scripts\dev.py installer
+git tag -a v1.0.0 -m "Trie FrameViewer v1.0.0"
+git push origin main refs/tags/v1.0.0
+python scripts\publish_release.py --check
+python scripts\publish_release.py --publish
+```
+
+Use a new version/tag for subsequent releases; never move an existing release tag.
+The publisher uses Python's standard library and the existing Git Credential Manager
+login. `GH_TOKEN` or `GITHUB_TOKEN` can be supplied instead, with Contents write access.
+Credentials remain in memory and are never written to files or logs. GitHub CLI is
+not required. This is an explicit publishing command, not an automatic push hook.
+
+Preflight requires a clean checkout, a version-matching tag at HEAD on origin, and
+an installer matching its `.sha256` file. `--check` only reads local/GitHub state.
+Without `--publish`, the script creates or resumes a draft. It uploads the installer
+and checksum, verifies GitHub's SHA-256 digest and size for each, and only then
+publishes and marks the release latest. It can resume matching draft uploads and
+leaves conflicting assets for inspection; it never overwrites a published release.
+
 ## Validation
 
 Run `python scripts/verify_installer.py` after creating the installer. It refuses to

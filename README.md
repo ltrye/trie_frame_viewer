@@ -4,6 +4,13 @@ A compact Windows desktop player for animation reference footage and playblasts.
 Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline is
 **v1.0**, with application version **1.0.0**.
 
+## Download and install
+
+Get the Windows x64 installer from the [latest GitHub release](https://github.com/ltrye/trie_frame_viewer/releases/latest).
+This repository is private, so invited users must sign in to GitHub to download it.
+The installer includes the runtime dependencies. Save your project and close the
+app before updating. The accompanying `.sha256` file verifies the download.
+
 ## Implemented
 
 - Local video playback, forward/reverse frame stepping, and reverse playback.
