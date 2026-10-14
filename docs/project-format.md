@@ -45,6 +45,12 @@ Every 30 seconds a modified project with an existing save location is saved to
 `<project>.tfv.autosave`. Open that file explicitly to recover it. Autosave files
 do not embed footage and are not automatically deleted.
 
+Save prompts and the unsaved indicator require at least one current bookmark.
+Deleting the last bookmark clears that state. Changing playback speed never marks
+the project modified; the current speed is still written on an explicit save.
+Other bookmark/review-setting edits mark the project modified while bookmarks exist.
+Manual saving remains available with zero bookmarks, including saving their removal.
+
 For image sequences, the reference points to a selected frame and the current
 decoder discovers matching numbered siblings. The source identity currently checks
 the selected image only. Sequence-wide fingerprints and stable source numbering

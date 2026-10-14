@@ -4,6 +4,7 @@
 #include "media/Decoder.h"
 #include "media/FrameCache.h"
 #include "media/MediaWorker.h"
+#include "platform/ResourceMonitor.h"
 #include "platform/WindowsIntegration.h"
 #include <QFile>
 #include <QJsonArray>
@@ -14,6 +15,75 @@
 class CoreTests : public QObject {
     Q_OBJECT
   private slots:
+    void debugPreferencePersistsAndMonitoringStopsWhenDisabled() {
+        QTemporaryDir settings;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        tfv::Preferences preferences;
+        QVERIFY(!preferences.debugMode());
+        preferences.setDebugMode(true);
+        tfv::Preferences restored;
+        QVERIFY(restored.debugMode());
+
+        tfv::ResourceMonitor monitor(100);
+        QSignalSpy samples(&monitor, &tfv::ResourceMonitor::metricsChanged);
+        QTest::qWait(150);
+        QVERIFY(samples.isEmpty());
+        monitor.setEnabled(true);
+        QVERIFY(monitor.ramAvailable());
+        QVERIFY(monitor.ramMiB() > 0);
+        QVERIFY(monitor.privateRamMiB() > 0);
+        QVERIFY(monitor.vramMiB() >= 0 && monitor.sharedGpuMiB() >= 0);
+        samples.clear();
+        const double before = monitor.privateRamMiB();
+        const QByteArray allocation(16 * 1048576, 'x');
+        QTRY_VERIFY_WITH_TIMEOUT(monitor.privateRamMiB() >= before + 8, 1000);
+        QVERIFY(!samples.isEmpty());
+        QCOMPARE(allocation.back(), 'x');
+        monitor.setEnabled(false);
+        samples.clear();
+        QTest::qWait(250);
+        QVERIFY(samples.isEmpty());
+        preferences.setDebugMode(false);
+        tfv::Preferences disabled;
+        QVERIFY(!disabled.debugMode());
+    }
+    void savePromptRequiresBookmarksAndIgnoresSpeedChanges() {
+        const QString path = qEnvironmentVariable("TFV_TEST_MEDIA");
+        if (path.isEmpty())
+            QSKIP("Generate the integration fixture with scripts/verify.ps1");
+        QTemporaryDir settings;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        tfv::Preferences preferences;
+        tfv::PlayerController player(preferences);
+        player.openMedia(QUrl::fromLocalFile(path));
+        QTRY_VERIFY_WITH_TIMEOUT(player.loaded(), 3000);
+        player.setSpeed(2);
+        player.setZoom(1.5);
+        player.setRange(4, 36);
+        QVERIFY(!player.dirty());
+        player.addBookmark("#e6bf79");
+        QVERIFY(player.dirty());
+        const QUrl project = QUrl::fromLocalFile(settings.filePath("bookmarks.tfv"));
+        QVERIFY(player.saveProject(project));
+        QVERIFY(!player.dirty());
+        player.setSpeed(0.5);
+        QVERIFY(!player.dirty());
+        auto* bookmarks = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
+        const QString id = bookmarks->at(0)->id;
+        bookmarks->rename(id, "Contact pose");
+        QVERIFY(player.dirty());
+        player.setSpeed(4);
+        QVERIFY(player.dirty());
+        QVERIFY(player.saveProject(project));
+        player.pan(5, 0);
+        QVERIFY(player.dirty());
+        bookmarks->remove(id);
+        QVERIFY(!player.dirty());
+        player.addBookmark("#a8d5c2");
+        QVERIFY(player.dirty());
+    }
     void contextMenuUsesQuotedPathsAndPreservesOtherApplications() {
         const QString root = "HKEY_CURRENT_USER\\Software\\Trie\\FrameViewerTests\\" +
                              QUuid::createUuid().toString(QUuid::WithoutBraces);

@@ -235,6 +235,37 @@ unavailable. At the default format, 64 MiB holds roughly 5 minutes 50 seconds.
 
 ## 8. Settings and code map
 
+### Live memory display
+
+Preferences → Debug Mode enables a small overlay in the viewer. It refreshes every
+500 ms (also while playback is paused) and stops sampling completely when disabled.
+The preference persists between launches and defaults to off.
+
+- **RAM** is this process's resident working set, including shared pages. The tooltip
+  also gives its private committed bytes; Task Manager's default private-working-set
+  column can differ. This measures the app as a whole, not just the frame cache.
+- **VRAM** sums this process's Windows GPU Process Memory `Dedicated Usage` instances.
+  It includes textures, decoding surfaces, and other allocations attributed to the process.
+- **Shared GPU** sums its `Shared Usage` instances: system memory used by the GPU.
+  Integrated graphics use system RAM, and GPU counters can overlap RAM accounting.
+- Instances are filtered by the exact `pid_<current PID>_` prefix and aggregated across
+  adapters/physical GPU nodes because decoding and rendering can use different GPUs.
+  The language-neutral PDH API translates English counter names on localized Windows.
+- If counters fail, omit this process, or publish empty usage, a fallback queries the real Qt D3D11 adapter
+  on the render thread after rendering, at most once per sampling interval. Its local
+  and non-local counts cover this process on that rendering GPU (node 0). The tooltip
+  identifies this narrower coverage. On integrated graphics, local memory is system RAM.
+- Unsupported/failed GPU queries display **Unavailable**. Counters are separate views
+  of memory accounting and must not be added together to estimate total physical usage.
+
+The monitor uses Windows [GetProcessMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getprocessmemoryinfo)
+and [PDH counters](https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhgetformattedcounterarrayw).
+The renderer fallback uses [QueryVideoMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiadapter3-queryvideomemoryinfo).
+It creates no GPU device and does not read back frames. Only the fallback requests
+rendering at the sampling interval; disabling Debug Mode stops sampling and requests.
+
+### Defaults and implementation
+
 Defaults live in `config/defaults.json`; exposed preferences may override them.
 
 | Setting | Default | Effect |
@@ -250,6 +281,8 @@ Defaults live in `config/defaults.json`; exposed preferences may override them.
 | `decoderThreads` | 2 | Requested video decoder thread count |
 | `decodeMode` | `auto` | Software/hardware selection policy |
 | `hardwareMinimumPixels` | 2,073,600 | Auto-mode hardware threshold |
+| `debugMode` | `false` | Enable the live memory overlay |
+| `debugRefreshIntervalMs` | 500 | Memory sampling interval while enabled |
 
 | Implementation | Responsibility |
 |---|---|
@@ -260,6 +293,7 @@ Defaults live in `config/defaults.json`; exposed preferences may override them.
 | `src/media/Decoder.cpp`, `src/media/VideoFrame.cpp` | FFmpeg seeking, compact pixels, hardware transfer |
 | `src/presentation/VideoItem.cpp`, `src/presentation/YuvNode.cpp` | Texture reuse, upload, and display |
 | `src/media/AudioEngine.cpp` | PCM output and scrub snippets |
+| `src/platform/ResourceMonitor.cpp`, `src/presentation/WindowDiagnostics.cpp`, `src/ui/components/DebugOverlay.qml` | Process memory sampling, renderer fallback, and optional display |
 
 Existing core, renderer, and audio tests cover cache eviction, cache refill,
 random/cancelled seeks, source changes, GPU color conversion/reuse, and repeated

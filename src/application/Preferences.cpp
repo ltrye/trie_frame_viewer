@@ -61,6 +61,15 @@ double Preferences::volume() const {
 QString Preferences::theme() const {
     return m_settings.value("theme", m_defaults.value("theme").toString()).toString();
 }
+bool Preferences::debugMode() const {
+    return m_settings.value("debugMode", m_defaults.value("debugMode").toBool()).toBool();
+}
+void Preferences::setDebugMode(bool enabled) {
+    if (debugMode() == enabled)
+        return;
+    m_settings.setValue("debugMode", enabled);
+    emit changed();
+}
 void Preferences::setCacheMiB(int v) {
     const auto limits = cacheLimits();
     m_settings.setValue("cacheMiB", std::clamp(v, limits["videoMin"].toInt(), limits["videoMax"].toInt()));

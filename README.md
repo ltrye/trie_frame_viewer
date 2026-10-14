@@ -20,9 +20,10 @@ Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline i
 - Bookmark navigation, compact text menus, and themed Windows title bars.
 - Versioned `.tfv` project save/load, relative media paths, identity checks, and relinking.
 - Review settings: range, frame, speed, audio offset, pan, zoom, rotation, and flips.
-- Autosave recovery files beside saved projects and unsaved-change prompts.
+- Autosave recovery files beside saved projects; save prompts require at least one bookmark and ignore speed changes.
 - Save dialogs suggest the current media's base name with a `.tfv` extension.
 - Per-user Windows video context-menu registration and removal in Preferences.
+- Optional Debug Mode with live process RAM, dedicated VRAM, and shared GPU memory.
 - Dark/light themes, configurable keyboard shortcuts, fullscreen, and always on top.
 
 ## Run the built app
@@ -78,6 +79,7 @@ the moving development asset. Qt is pinned to 6.8.3.
 | GPU display integration | `src/presentation/VideoItem.*`, `YuvNode.*`, `shaders/` |
 | Native Windows title-bar integration | `src/presentation/WindowChrome.*` |
 | Windows context menu / Open with integration | `src/platform/WindowsIntegration.*`, `config/windows-integration.json` |
+| Live process memory monitoring / overlay | `src/platform/ResourceMonitor.*`, `src/presentation/WindowDiagnostics.*`, `src/ui/components/DebugOverlay.qml` |
 | Installer and production packaging | `packaging/windows/installer.nsi`, `scripts/build_installer.py` |
 
 See `docs/architecture.md` for ownership and extension rules, and

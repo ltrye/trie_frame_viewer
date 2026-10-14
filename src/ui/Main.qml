@@ -11,6 +11,7 @@ Controls.ApplicationWindow {
     required property var player
     required property var preferences
     required property var windowsIntegration
+    required property var resourceMonitor
     width: Theme.defaultWidth
     height: Theme.defaultHeight
     minimumWidth: Theme.minimumWidth
@@ -210,13 +211,14 @@ Controls.ApplicationWindow {
     }
     Controls.Dialog {
         id: unsaved
+        objectName: "unsavedProjectDialog"
         title: qsTr("Save your project?")
         modal: true
         anchors.centerIn: parent
         width: 430
         standardButtons: Controls.Dialog.Save | Controls.Dialog.Discard | Controls.Dialog.Cancel
         contentItem: Text {
-            text: qsTr("Your bookmarks and review settings have unsaved changes.")
+            text: qsTr("Your project has unsaved bookmarks or review settings.")
             color: Theme.ink
             font.family: Theme.font
             font.pixelSize: Theme.textBody
@@ -299,6 +301,7 @@ Controls.ApplicationWindow {
                 Layout.fillHeight: true
                 player: app.player
                 preferences: app.preferences
+                resourceMonitor: app.resourceMonitor
                 onOpenRequested: app.dispatch("openMedia")
             }
             Timeline {

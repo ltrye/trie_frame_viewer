@@ -7,6 +7,7 @@ Item {
     id: viewer
     required property var player
     required property var preferences
+    required property var resourceMonitor
     signal openRequested
     clip: true
     Rectangle {
@@ -134,5 +135,13 @@ Item {
         }
         text: player.loaded ? Math.round(viewer.fitScale * player.zoom * 100) + "%" : ""
         visible: player.loaded
+    }
+    DebugOverlay {
+        monitor: viewer.resourceMonitor
+        anchors {
+            right: parent.right
+            bottom: parent.bottom
+            margins: Theme.spaceMd
+        }
     }
 }

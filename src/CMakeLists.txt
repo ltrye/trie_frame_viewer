@@ -8,6 +8,7 @@ add_library(tfv_core STATIC
     application/Preferences.cpp application/Preferences.h
     application/PlayerController.cpp application/PlayerController.h
     platform/WindowsIntegration.cpp platform/WindowsIntegration.h
+    platform/ResourceMonitor.cpp platform/ResourceMonitor.h
 )
 target_include_directories(tfv_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(tfv_core PUBLIC Qt6::Core Qt6::Gui Qt6::Multimedia FFmpeg::FFmpeg)
@@ -16,7 +17,7 @@ qt_add_resources(tfv_core tfv_defaults PREFIX "/tfv" FILES ../config/defaults.js
 set_source_files_properties(../config/windows-integration.json PROPERTIES QT_RESOURCE_ALIAS "config/windows-integration.json")
 qt_add_resources(tfv_core tfv_windows_integration PREFIX "/tfv" FILES ../config/windows-integration.json)
 if(WIN32)
-    target_link_libraries(tfv_core PUBLIC shell32)
+    target_link_libraries(tfv_core PUBLIC shell32 psapi pdh)
 endif()
 target_compile_definitions(tfv_core PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 if(MSVC)
@@ -26,6 +27,7 @@ qt_add_executable(TrieFrameViewer WIN32 app/main.cpp
     presentation/VideoItem.cpp presentation/VideoItem.h
     presentation/YuvNode.cpp presentation/YuvNode.h
     presentation/WindowChrome.cpp presentation/WindowChrome.h)
+target_sources(TrieFrameViewer PRIVATE presentation/WindowDiagnostics.cpp presentation/WindowDiagnostics.h)
 
 target_compile_definitions(TrieFrameViewer PRIVATE TFV_APP_VERSION="${PROJECT_VERSION}")
 
@@ -41,7 +43,7 @@ qt_add_shaders(TrieFrameViewer tfv_video_shaders
     PREFIX "/tfv" BASE "presentation"
     FILES presentation/shaders/yuv.vert presentation/shaders/yuv.frag)
 if(WIN32)
-    target_link_libraries(TrieFrameViewer PRIVATE dwmapi)
+    target_link_libraries(TrieFrameViewer PRIVATE dwmapi d3d11 dxgi)
 endif()
 if(BUILD_TESTING)
     target_link_libraries(TrieFrameViewer PRIVATE Qt6::Test)
@@ -56,6 +58,7 @@ qt_add_qml_module(TrieFrameViewer
         ui/Main.qml ui/Theme.qml ui/IconPaths.qml
         ui/components/Icon.qml ui/components/ToolButton.qml ui/components/AppMenuBar.qml
         ui/components/Chip.qml ui/components/SectionLabel.qml
+        ui/components/DebugOverlay.qml
         ui/components/SelectControl.qml ui/components/ValueSlider.qml ui/components/FrameInput.qml
         ui/components/Timeline.qml ui/components/BookmarkEditor.qml
         ui/views/Viewer.qml ui/views/Transport.qml

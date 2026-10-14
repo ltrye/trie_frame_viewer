@@ -15,6 +15,7 @@ class Preferences final : public QObject {
     Q_PROPERTY(QVariantList decodeOptions READ decodeOptions CONSTANT)
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY changed)
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY changed)
+    Q_PROPERTY(bool debugMode READ debugMode WRITE setDebugMode NOTIFY changed)
     Q_PROPERTY(QVariantList actions READ actions NOTIFY changed)
     Q_PROPERTY(QVariantMap shortcuts READ shortcuts NOTIFY changed)
     Q_PROPERTY(QVariantList playbackSpeeds READ playbackSpeeds CONSTANT)
@@ -32,6 +33,7 @@ class Preferences final : public QObject {
     void setDecodeMode(const QString& value);
     double volume() const;
     QString theme() const;
+    bool debugMode() const;
     QVariantList actions() const;
     QVariantMap shortcuts() const;
     QVariantList playbackSpeeds() const;
@@ -40,6 +42,7 @@ class Preferences final : public QObject {
     void setCacheMiB(int value);
     void setVolume(double value);
     void setTheme(const QString& value);
+    void setDebugMode(bool enabled);
     Q_INVOKABLE void setShortcut(const QString& id, const QString& shortcut);
     Q_INVOKABLE void resetShortcuts();
     Q_INVOKABLE void toggleMute();

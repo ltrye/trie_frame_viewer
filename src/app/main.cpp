@@ -1,7 +1,9 @@
 #include "application/PlayerController.h"
+#include "platform/ResourceMonitor.h"
 #include "platform/WindowsIntegration.h"
 #include "presentation/VideoItem.h"
 #include "presentation/WindowChrome.h"
+#include "presentation/WindowDiagnostics.h"
 #ifdef TFV_DEVELOPMENT_TESTS
 #include "../../tests/AppSmoke.h"
 #include "../../tests/PerformanceBench.h"
@@ -94,10 +96,15 @@ int main(int argc, char* argv[]) {
     }
 #endif
     tfv::PlayerController player(preferences);
+    tfv::ResourceMonitor resourceMonitor(preferences.integer("debugRefreshIntervalMs"));
+    resourceMonitor.setEnabled(preferences.debugMode());
+    QObject::connect(&preferences, &tfv::Preferences::changed, &resourceMonitor,
+                     [&] { resourceMonitor.setEnabled(preferences.debugMode()); });
     tfv::WindowsIntegration windowsIntegration;
     QQmlApplicationEngine engine;
     engine.setInitialProperties({{"player", QVariant::fromValue(&player)},
                                  {"preferences", QVariant::fromValue(&preferences)},
+                                 {"resourceMonitor", QVariant::fromValue(&resourceMonitor)},
                                  {"windowsIntegration", QVariant::fromValue(&windowsIntegration)}});
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },
@@ -106,6 +113,7 @@ int main(int argc, char* argv[]) {
     if (engine.rootObjects().isEmpty())
         return 1;
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+    tfv::connectWindowDiagnostics(*window, resourceMonitor);
     for (auto* surface : window->findChildren<tfv::VideoItem*>())
         QObject::connect(&player, &tfv::PlayerController::frameReady, surface, &tfv::VideoItem::setFrame);
     const auto arguments = parser.positionalArguments();

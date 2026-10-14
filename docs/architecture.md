@@ -20,6 +20,18 @@ cleanup is generated from the same configuration. Registry removals check the qu
 command path before deleting entries, so uninstalling an older copy preserves a newer
 copy's registration. The adapter never changes video default-player/UserChoice values.
 
+`platform/ResourceMonitor` samples this process's resident/committed RAM and Windows
+PDH GPU Process Memory counters on the GUI thread. It lazily opens a reusable query
+and filters exact PID prefixes across all adapter/node instances. Sampling
+runs only while the persisted Debug Mode preference is enabled; its interval lives
+in `defaults.json`. The reusable DebugOverlay receives this service explicitly.
+When performance counters omit this process or publish empty usage, `presentation/WindowDiagnostics`
+services a throttled fallback request on Qt's render thread using its real D3D11
+adapter. It returns plain byte counts through a queued callback; the monitor never
+reads renderer objects. This fallback requests an update at the sampling interval,
+creates no GPU device, and performs no frame readback. The overlay tooltip identifies
+whether readings cover all adapters or only the rendering adapter.
+
 `presentation` adapts VideoFrame values to Qt Quick textures. VideoItem selects the
 YUV shader or an RGBA/software-rendering fallback. YuvNode owns a bounded texture
 LRU and all plane uploads on the render thread. Its QRhi integration uses Qt's
@@ -111,6 +123,12 @@ ProjectDocument writes with QSaveFile and parses into a temporary object. Bookma
 validates all bookmarks before replacing its list. Relative paths are resolved against
 the project location. A file-size and sampled-content fingerprint prevents silently
 applying old bookmarks to changed video. It is not a full-file authenticity check.
+
+The controller marks a project dirty for bookmark/review edits only while it has at
+least one bookmark. Removing the last bookmark clears the dirty flag, so closing or
+replacing bookmark-free media never prompts to save. Speed changes do not mark dirty,
+even with saved bookmarks. Explicit saves still include current speed and review
+settings. These rules apply to the title indicator, close/open/drop guards, and autosave.
 
 Changing the schema requires a version bump plus an explicit migration or rejection.
 The current schema supports one source per project. Introduce a media ID/reference

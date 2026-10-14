@@ -142,9 +142,10 @@ void PlayerController::clearError() {
     emit statusChanged();
 }
 void PlayerController::markDirty() {
-    if (m_dirty || !m_loaded)
+    const bool dirty = m_loaded && m_bookmarks.rowCount() > 0;
+    if (m_dirty == dirty)
         return;
-    m_dirty = true;
+    m_dirty = dirty;
     emit projectChanged();
 }
 void PlayerController::openMedia(const QUrl& url) {
@@ -413,7 +414,6 @@ void PlayerController::setSpeed(double value) {
     m_speed = std::clamp(value, 0.25, 4.);
     if (m_playing)
         resetClock();
-    markDirty();
     emit playbackChanged();
 }
 void PlayerController::setLoopMode(const QString& mode) {

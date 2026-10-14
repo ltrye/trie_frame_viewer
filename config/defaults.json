@@ -12,6 +12,8 @@
   "decodeOptions": [{"id": "auto", "label": "Auto"}, {"id": "software", "label": "CPU"}, {"id": "hardware", "label": "GPU when available"}],
   "volume": 0.7,
   "theme": "dark",
+  "debugMode": false,
+  "debugRefreshIntervalMs": 500,
   "fineScrubPixelsPerFrame": 12,
   "scrubPixelsPerFrame": 3,
   "playbackSpeeds": [0.25, 0.5, 1, 1.5, 2, 4],

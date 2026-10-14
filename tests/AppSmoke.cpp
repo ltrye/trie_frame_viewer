@@ -1,5 +1,6 @@
 #include "AppSmoke.h"
 #include "application/PlayerController.h"
+#include "platform/ResourceMonitor.h"
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
@@ -9,6 +10,7 @@
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTimer>
+#include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
 
 static QQuickItem* visualItem(QQuickItem* parent, const QString& name) {
@@ -299,6 +301,88 @@ static bool nativeCaptionMatches(QQuickWindow& window, bool dark) {
     return QGuiApplication::platformName() != "windows" || chrome->property("applied").toBool();
 }
 
+static bool savePromptSmoke(QQuickWindow& window, tfv::PlayerController& player, const QString& directory) {
+    auto* dialog = window.findChild<QObject*>("unsavedProjectDialog");
+    auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
+    if (!dialog || !model || model->rowCount())
+        return false;
+    const auto promptVisible = [&] {
+        QMetaObject::invokeMethod(&window, "guarded", Q_ARG(QVariant, QVariant("testNoAction")));
+        QCoreApplication::processEvents();
+        const bool visible = dialog->property("visible").toBool();
+        if (visible) {
+            QMetaObject::invokeMethod(dialog, "reject");
+            QTest::qWait(150);
+        }
+        return visible;
+    };
+    player.setSpeed(2);
+    player.setZoom(1.1);
+    bool valid = !player.dirty() && !promptVisible();
+    player.addBookmark("#e6bf79");
+    valid = player.dirty() && promptVisible() && valid;
+    const QString id = model->at(0)->id;
+    valid = player.saveProject(QUrl::fromLocalFile(directory + "/save-prompt.tfv")) && valid;
+    player.setSpeed(0.5);
+    valid = !player.dirty() && !promptVisible() && valid;
+    model->rename(id, "Unsaved pose");
+    valid = player.dirty() && promptVisible() && valid;
+    model->remove(id);
+    valid = !player.dirty() && !promptVisible() && valid;
+    player.setSpeed(1);
+    player.resetView();
+    return valid;
+}
+
+static bool debugUiSmoke(QQuickWindow& window, tfv::Preferences& preferences, const QString& directory,
+                         QJsonObject& report) {
+    auto* monitor = qobject_cast<tfv::ResourceMonitor*>(window.property("resourceMonitor").value<QObject*>());
+    auto* checkbox = window.findChild<QQuickItem*>("debugModeCheckBox");
+    auto* overlay = visualItem(window.contentItem(), "debugMemoryOverlay");
+    auto* dialog = window.findChild<QObject*>("preferencesDialog");
+    if (!monitor || !checkbox || !overlay || !dialog)
+        return false;
+    preferences.setDebugMode(false);
+    QCoreApplication::processEvents();
+    bool valid = !monitor->enabled() && !overlay->isVisible();
+    QSignalSpy samples(monitor, &tfv::ResourceMonitor::metricsChanged);
+    clickItem(window, checkbox);
+    // Hidden diagnostic windows need an explicit render to service the native
+    // adapter fallback; ordinary exposed windows render on update requests.
+    window.grabWindow();
+    QTest::qWait(650);
+    report["debugPreferenceEnabled"] = preferences.debugMode() && monitor->enabled();
+    report["debugOverlayVisible"] = overlay->isVisible();
+    report["debugSampleCount"] = samples.count();
+    valid = preferences.debugMode() && monitor->enabled() && overlay->isVisible() && samples.count() >= 2 &&
+            monitor->ramAvailable() && monitor->ramMiB() > 0 && valid;
+    const bool direct3D = window.rendererInterface()->graphicsApi() == QSGRendererInterface::Direct3D11;
+    valid =
+        (!direct3D || (monitor->gpuAvailable() && monitor->vramMiB() + monitor->sharedGpuMiB() > 0)) && valid;
+    report["debugRamMiB"] = monitor->ramMiB();
+    report["debugVramMiB"] = monitor->vramMiB();
+    report["debugSharedGpuMiB"] = monitor->sharedGpuMiB();
+    report["debugGpuAvailable"] = monitor->gpuAvailable();
+    report["debugGpuAllAdapters"] = monitor->gpuAllAdapters();
+    valid = window.grabWindow().save(directory + "/preferences-debug.png") && valid;
+    QMetaObject::invokeMethod(dialog, "close");
+    QTest::qWait(150);
+    valid = window.grabWindow().save(directory + "/debug-memory.png") && valid;
+    preferences.setTheme("light");
+    QTest::qWait(150);
+    window.resize(860, 540);
+    QTest::qWait(100);
+    valid = overlay->isVisible() && overlay->mapToScene({0, 0}).x() >= 0 &&
+            window.grabWindow().save(directory + "/debug-memory-light.png") && valid;
+    preferences.setDebugMode(false);
+    QCoreApplication::processEvents();
+    report["debugDisabledStopsAndHides"] = !monitor->enabled() && !overlay->isVisible();
+    valid = !monitor->enabled() && !overlay->isVisible() && valid;
+    preferences.setTheme("dark");
+    window.resize(1160, 800);
+    return valid;
+}
+
 static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Preferences& preferences,
                           const QString& directory, std::shared_ptr<QJsonObject> report,
                           std::shared_ptr<bool> valid) {
@@ -319,6 +403,9 @@ static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Prefe
             QMetaObject::invokeMethod(&window, "dispatch", Q_ARG(QVariant, QVariant("settings")));
             QTimer::singleShot(200, &app, [&, directory, report, valid] {
                 *valid = window.grabWindow().save(directory + "/preferences.png") && *valid;
+                const bool debugValid = debugUiSmoke(window, preferences, directory, *report);
+                (*report)["debugModeShowsLiveMemory"] = debugValid;
+                *valid = debugValid && *valid;
                 QFile output(directory + "/smoke-report.json");
                 output.open(QIODevice::WriteOnly);
                 output.write(QJsonDocument(*report).toJson());
@@ -389,6 +476,7 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         const bool saveNameValid =
             savePrepared && saveDialog->property("selectedFile").toUrl() == player.suggestedProjectUrl() &&
             saveDialog->property("currentFolder").toUrl().isParentOf(player.suggestedProjectUrl());
+        const bool savePromptValid = savePromptSmoke(window, player, directory);
         const bool frameFieldsValid = editFrameFields(window, player);
         player.seek(24);
         player.addBookmark("#e6bf79");
@@ -410,7 +498,8 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         player.openProject(QUrl::fromLocalFile(path));
         QTimer::singleShot(
             1500, &app,
-            [&, directory, frameFieldsValid, bookmarksValid, saveNameValid, timelineTransportValid] {
+            [&, directory, frameFieldsValid, bookmarksValid, saveNameValid, savePromptValid,
+             timelineTransportValid] {
                 QQmlListReference menus(window.findChild<QObject*>("appMenuBar"), "menus");
                 const bool noSidebar = !window.findChild<QQuickItem*>("bookmarkPanel");
                 auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
@@ -428,6 +517,7 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                     QJsonObject{{"loaded", player.loaded()},
                                 {"timelinePreservesPlaybackState", timelineTransportValid},
                                 {"projectSaveDefaultsToMediaName", saveNameValid},
+                                {"savePromptRequiresBookmarksAndIgnoresSpeed", savePromptValid},
                                 {"contextMenuSettingsAvailable",
                                  window.findChild<QQuickItem*>("registerContextMenuButton") != nullptr},
                                 {"frame", player.currentFrame()},
@@ -455,9 +545,10 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                     player.loaded() && player.currentFrame() == 24 &&
                     player.bookmarks()->property("count").toInt() == 2 && player.rotation() == 90 &&
                     player.flipH() && !player.dirty() && player.error().isEmpty() && noSidebar &&
-                    bookmarksValid && bookmarksRestored && saveNameValid && timelineTransportValid &&
-                    frameFieldsOnOneRow(window) && centeredButtons(window) && frameFieldsValid &&
-                    fieldsRestored && menus.count() == 8 && nativeCaptionMatches(window, true));
+                    bookmarksValid && bookmarksRestored && saveNameValid && savePromptValid &&
+                    timelineTransportValid && frameFieldsOnOneRow(window) && centeredButtons(window) &&
+                    frameFieldsValid && fieldsRestored && menus.count() == 8 &&
+                    nativeCaptionMatches(window, true));
                 *valid = window.grabWindow().save(directory + "/review-dark.png") && *valid;
                 stage(directory, "Starting forward playback");
                 if (qEnvironmentVariableIsSet("TFV_SMOKE_SILENT"))
@@ -482,5 +573,5 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
                 });
             });
     });
-    QTimer::singleShot(20000, &app, [] { QCoreApplication::exit(5); });
+    QTimer::singleShot(45000, &app, [] { QCoreApplication::exit(5); });
 }

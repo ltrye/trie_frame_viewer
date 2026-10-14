@@ -5,6 +5,7 @@ import Trie.FrameViewer
 
 Controls.Dialog {
     id: settings
+    objectName: "preferencesDialog"
     required property var preferences
     required property var player
     required property var windowsIntegration
@@ -56,6 +57,23 @@ Controls.Dialog {
                         currentIndex: preferences.theme === "dark" ? 0 : 1
                         onActivated: preferences.theme = index === 0 ? "dark" : "light"
                     }
+                }
+                SectionLabel {
+                    text: qsTr("DIAGNOSTICS")
+                }
+                Controls.CheckBox {
+                    objectName: "debugModeCheckBox"
+                    text: qsTr("Debug Mode")
+                    checked: preferences.debugMode
+                    onToggled: preferences.debugMode = checked
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Show live RAM, VRAM, and shared GPU memory usage in the viewer. Integrated graphics use system RAM for GPU memory.")
+                    wrapMode: Text.WordWrap
+                    color: Theme.secondary
+                    font.family: Theme.font
+                    font.pixelSize: Theme.textBody
                 }
                 SectionLabel {
                     text: qsTr("WINDOWS INTEGRATION")
