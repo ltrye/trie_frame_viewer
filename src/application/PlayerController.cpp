@@ -139,15 +139,49 @@ QUrl PlayerController::suggestedClipUrl() const {
 bool PlayerController::exportRange(const QUrl& url) {
     if (!m_loaded)
         return false;
+    return m_exporter.start(exportRequest(m_in, m_out), url);
+}
+ClipExportRequest PlayerController::exportRequest(int start, int end) const {
     ClipExportRequest request;
     request.source = m_mediaPath;
     request.images = m_info.sequence ? Decoder::imageSequenceFiles(m_mediaPath) : QStringList{};
-    request.start = m_in;
-    request.end = m_out;
+    request.start = start;
+    request.end = end;
     request.frameCount = m_info.frameCount;
     request.fps = m_info.fps;
     request.width = m_info.width;
     request.height = m_info.height;
+    return request;
+}
+QUrl PlayerController::suggestedVideoExportUrl(const QString& resolutionId) const {
+    if (!m_loaded)
+        return {};
+    for (const auto& option : m_preferences.videoExportPresets()) {
+        const auto preset = option.toMap();
+        if (preset.value("id").toString() != resolutionId)
+            continue;
+        const QFileInfo media(m_mediaPath);
+        const auto size =
+            preset.value("width").toInt() > 0
+                ? QString("_%1x%2").arg(preset.value("width").toInt()).arg(preset.value("height").toInt())
+                : QString("_source");
+        return QUrl::fromLocalFile(media.absolutePath() + '/' + media.completeBaseName() + size + ".mp4");
+    }
+    return {};
+}
+bool PlayerController::exportVideo(const QUrl& url, const QString& resolutionId) {
+    if (!m_loaded)
+        return false;
+    auto request = exportRequest(0, m_info.frameCount - 1);
+    request.outputWidth = request.outputHeight = -1;
+    for (const auto& option : m_preferences.videoExportPresets()) {
+        const auto preset = option.toMap();
+        if (preset.value("id").toString() == resolutionId) {
+            request.outputWidth = preset.value("width").toInt();
+            request.outputHeight = preset.value("height").toInt();
+            break;
+        }
+    }
     return m_exporter.start(request, url);
 }
 QString PlayerController::mediaDescription() const {

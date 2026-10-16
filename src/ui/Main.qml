@@ -157,6 +157,9 @@ Controls.ApplicationWindow {
         else if (action === "exportRange") {
             if (player.loaded && !player.clipExporter.busy)
                 exportDialog.openForRange();
+        } else if (action === "exportVideo") {
+            if (player.loaded && !player.clipExporter.busy)
+                exportVideoOptions.openForVideo();
         } else if (action === "alwaysOnTop") {
             windowChrome.alwaysOnTop = !windowChrome.alwaysOnTop;
         } else if (action === "cinemaMode")
@@ -184,7 +187,7 @@ Controls.ApplicationWindow {
             required property var modelData
             sequence: modelData.shortcut
             autoRepeat: modelData.id !== "cinemaMode" && modelData.id !== "exitCinemaMode"
-            enabled: modelData.shortcut.length > 0 && (modelData.id === "cinemaMode" || !app.textInputActive) && !reviewStage.editingBookmark && !settingsDialog.visible && !exportProgress.visible && !exportDialog.visible && !unsaved.visible && !aboutDialog.visible && (modelData.id !== "exitCinemaMode" || (app.cinemaMode && !reviewStage.popupOpen))
+            enabled: modelData.shortcut.length > 0 && (modelData.id === "cinemaMode" || !app.textInputActive) && !reviewStage.editingBookmark && !settingsDialog.visible && !exportVideoOptions.visible && !exportProgress.visible && !exportDialog.visible && !unsaved.visible && !aboutDialog.visible && (modelData.id !== "exitCinemaMode" || (app.cinemaMode && !reviewStage.popupOpen))
             onActivated: app.dispatch(modelData.id)
         }
     }
@@ -232,7 +235,11 @@ Controls.ApplicationWindow {
     FileDialog {
         id: exportDialog
         objectName: "exportClipDialog"
+        property bool wholeVideo: false
+        property string resolutionId: ""
         function prepareForRange() {
+            wholeVideo = false;
+            resolutionId = "";
             const suggestion = String(player.suggestedClipUrl);
             currentFolder = suggestion.slice(0, suggestion.lastIndexOf("/") + 1);
             selectedFile = player.suggestedClipUrl;
@@ -241,12 +248,26 @@ Controls.ApplicationWindow {
             prepareForRange();
             open();
         }
-        title: qsTr("Export Time range to new clip")
+        function prepareForVideo(id) {
+            wholeVideo = true;
+            resolutionId = id;
+            const suggestion = String(player.suggestedVideoExportUrl(id));
+            currentFolder = suggestion.slice(0, suggestion.lastIndexOf("/") + 1);
+            selectedFile = player.suggestedVideoExportUrl(id);
+        }
+        function openForVideo(id) {
+            prepareForVideo(id);
+            open();
+        }
+        title: wholeVideo ? qsTr("Export current video to MP4") : qsTr("Export Time range to new clip")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "mp4"
         nameFilters: [qsTr("MP4 clips (*.mp4)")]
         onAccepted: {
-            player.exportRange(selectedFile);
+            if (wholeVideo)
+                player.exportVideo(selectedFile, resolutionId);
+            else
+                player.exportRange(selectedFile);
             exportProgress.begin();
         }
     }
@@ -254,6 +275,13 @@ Controls.ApplicationWindow {
         id: exportProgress
         parent: Controls.Overlay.overlay
         exporter: app.player.clipExporter
+    }
+    ExportVideoDialog {
+        id: exportVideoOptions
+        parent: Controls.Overlay.overlay
+        preferences: app.preferences
+        player: app.player
+        onResolutionChosen: id => exportDialog.openForVideo(id)
     }
     Connections {
         target: player

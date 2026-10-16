@@ -20,6 +20,8 @@ class Preferences final : public QObject {
     Q_PROPERTY(QVariantList actions READ actions NOTIFY shortcutsChanged)
     Q_PROPERTY(QVariantMap shortcuts READ shortcuts NOTIFY shortcutsChanged)
     Q_PROPERTY(QVariantList playbackSpeeds READ playbackSpeeds CONSTANT)
+    Q_PROPERTY(QVariantList videoExportPresets READ videoExportPresets CONSTANT)
+    Q_PROPERTY(QString defaultVideoExportPreset READ defaultVideoExportPreset CONSTANT)
     Q_PROPERTY(double zoomWheelFactor READ zoomWheelFactor CONSTANT)
   public:
     explicit Preferences(QObject* parent = nullptr);
@@ -44,6 +46,8 @@ class Preferences final : public QObject {
     QJsonObject exportOptions() const {
         return m_defaults.value("export").toObject();
     }
+    QVariantList videoExportPresets() const;
+    QString defaultVideoExportPreset() const;
     void setCacheMiB(int value);
     void setVolume(double value);
     void setTheme(const QString& value);

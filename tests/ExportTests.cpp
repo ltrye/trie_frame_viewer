@@ -1,3 +1,4 @@
+#include "application/PlayerController.h"
 #include "application/Preferences.h"
 #include "media/ClipExporter.h"
 #include "media/Decoder.h"
@@ -123,6 +124,72 @@ class ExportTests : public QObject {
         QVERIFY(sequence.frame(0, error).pixelColor(40, 40).red() > 200);
         QVERIFY(sequence.frame(1, error).pixelColor(40, 40).green() > 200);
         QVERIFY(sequence.frame(2, error).pixelColor(40, 40).blue() > 200);
+    }
+    void fullVideoUsesFullHdAndIgnoresReviewRange() {
+        QTemporaryDir folder;
+        tfv::Preferences preferences;
+        QCOMPARE(preferences.defaultVideoExportPreset(), QString("fullHd"));
+        tfv::PlayerController player(preferences);
+        player.openMedia(QUrl::fromLocalFile(qEnvironmentVariable("TFV_TEST_MEDIA")));
+        QTRY_VERIFY_WITH_TIMEOUT(player.loaded(), 5000);
+        player.setRange(4, 9);
+        player.seek(7);
+        player.setSpeed(2);
+        const int frames = player.frameCount();
+        const auto suggested = player.suggestedVideoExportUrl(preferences.defaultVideoExportPreset());
+        QVERIFY(suggested.fileName().endsWith("_1920x1080.mp4"));
+        auto* exporter = qobject_cast<tfv::ClipExporter*>(player.clipExporter());
+        QVERIFY(exporter);
+        QSignalSpy finished(exporter, &tfv::ClipExporter::finished);
+        const auto output = folder.filePath("entire-video.mp4");
+        QVERIFY(player.exportVideo(QUrl::fromLocalFile(output), preferences.defaultVideoExportPreset()));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
+        QVERIFY2(finished.first()[0].toBool(), qPrintable(exporter->error()));
+        tfv::Decoder clip;
+        QString error;
+        QVERIFY2(clip.open(output, error), qPrintable(error));
+        QCOMPARE(clip.info().width, 1920);
+        QCOMPARE(clip.info().height, 1080);
+        QCOMPARE(clip.info().frameCount, frames);
+        QVERIFY(qAbs(clip.info().fps - player.fps()) < 0.001);
+        QString warning;
+        const auto pcm = tfv::Decoder::decodeAudio(output, 4 * 1048576, [] { return false; }, warning);
+        QVERIFY(pcm.size() / (48000. * 4) >= frames / player.fps() - 0.05);
+        QCOMPARE(player.rangeStart(), 4);
+        QCOMPARE(player.rangeEnd(), 9);
+        QCOMPARE(player.currentFrame(), 7);
+        QCOMPARE(player.speed(), 2.);
+        QVERIFY(!player.dirty());
+        QVERIFY(!player.exportVideo(QUrl::fromLocalFile(folder.filePath("invalid.mp4")), "invalid-preset"));
+        QVERIFY(exporter->error().contains("resolution"));
+    }
+    void resizedPortraitKeepsAspectRatio() {
+        QTemporaryDir folder;
+        QImage image(80, 160, QImage::Format_RGB32);
+        image.fill(Qt::green);
+        const auto source = folder.filePath("portrait.png");
+        QVERIFY(image.save(source));
+        auto selection = request(source, 0, 0);
+        selection.outputWidth = 1280;
+        selection.outputHeight = 720;
+        tfv::Preferences preferences;
+        tfv::ClipExporter exporter(preferences.exportOptions());
+        QSignalSpy finished(&exporter, &tfv::ClipExporter::finished);
+        const auto output = folder.filePath("portrait.mp4");
+        QVERIFY(exporter.start(selection, QUrl::fromLocalFile(output)));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 15000);
+        QVERIFY2(finished.first()[0].toBool(), qPrintable(exporter.error()));
+        tfv::Decoder clip;
+        QString error;
+        QVERIFY(clip.open(output, error));
+        QCOMPARE(clip.info().width, 1280);
+        QCOMPARE(clip.info().height, 720);
+        const auto frame = clip.frame(0, error);
+        QVERIFY(frame.pixelColor(640, 30).green() > 200);
+        QVERIFY(frame.pixelColor(640, 690).green() > 200);
+        const auto left = frame.pixelColor(430, 360), right = frame.pixelColor(850, 360);
+        QVERIFY(left.red() < 10 && left.green() < 10 && left.blue() < 10);
+        QVERIFY(right.red() < 10 && right.green() < 10 && right.blue() < 10);
     }
     void cancellationAndFailurePreserveExistingOutput() {
         QTemporaryDir folder;

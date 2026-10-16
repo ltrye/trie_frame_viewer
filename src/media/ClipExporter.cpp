@@ -81,6 +81,10 @@ bool ClipExporter::start(const ClipExportRequest& request, const QUrl& destinati
         request.end >= request.frameCount || !std::isfinite(request.fps) || request.fps < 1 ||
         request.fps > 1000 || request.width <= 0 || request.height <= 0)
         return reject(tr("The media or selected frame range is invalid."));
+    const bool resize = request.outputWidth != 0 || request.outputHeight != 0;
+    if (resize && (request.outputWidth < 2 || request.outputHeight < 2 || request.outputWidth > 8192 ||
+                   request.outputHeight > 8192 || request.outputWidth % 2 || request.outputHeight % 2))
+        return reject(tr("Choose a valid export resolution."));
     const auto sameFile = [](const QFileInfo& a, const QFileInfo& b) {
         return a.exists() && b.exists() &&
                a.canonicalFilePath().compare(b.canonicalFilePath(), Qt::CaseInsensitive) == 0;
@@ -141,16 +145,23 @@ bool ClipExporter::start(const ClipExportRequest& request, const QUrl& destinati
         m_sequence->close();
         arguments << "-f" << "concat" << "-safe" << "0" << "-i" << sequence;
     }
-    const qint64 bitrate = std::clamp<qint64>(qint64(request.width * double(request.height) * request.fps *
+    const int outputWidth = resize ? request.outputWidth : request.width;
+    const int outputHeight = resize ? request.outputHeight : request.height;
+    const QString filter =
+        resize ? QString("scale=%1:%2:force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1,"
+                         "pad=%1:%2:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p")
+                     .arg(outputWidth)
+                     .arg(outputHeight)
+               : QString("pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuv420p");
+    const qint64 bitrate = std::clamp<qint64>(qint64(outputWidth * double(outputHeight) * request.fps *
                                                      m_options.value("bitsPerPixel").toDouble(0.2)),
                                               m_options.value("minimumBitrate").toInt(2000000),
                                               m_options.value("maximumBitrate").toInt(80000000));
     arguments << "-map" << "0:v:0" << "-map" << "0:a:0?" << "-t" << seconds(duration) << "-frames:v"
               << QString::number(request.end - request.start + 1) << "-r"
-              << QString::number(request.fps, 'g', 15) << "-vf"
-              << "pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuv420p"
-              << "-c:v" << m_options.value("videoEncoder").toString("libopenh264") << "-b:v"
-              << QString::number(bitrate) << "-threads" << QString::number(threads) << "-c:a" << "aac"
+              << QString::number(request.fps, 'g', 15) << "-vf" << filter << "-c:v"
+              << m_options.value("videoEncoder").toString("libopenh264") << "-b:v" << QString::number(bitrate)
+              << "-threads" << QString::number(threads) << "-c:a" << "aac"
               << "-b:a" << QString::number(m_options.value("audioBitrate").toInt(192000)) << "-af" << "apad"
               << "-map_metadata" << "-1" << "-map_chapters" << "-1"
               << "-movflags" << "+faststart" << "-f" << "mp4" << staging;

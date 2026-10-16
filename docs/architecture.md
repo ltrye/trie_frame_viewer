@@ -77,6 +77,12 @@ temporary file beside the destination, committed with Windows replacement/rename
 on success. Cancellation, failure, and shutdown remove temporary files. Decoder and
 export share image-sequence discovery so ordering and numbering gaps agree.
 
+Full-video export uses the same exporter with a complete-media range and optional
+output dimensions. Resolution presets and the Full HD default live in defaults.json;
+ExportVideoDialog owns selection and passes the preset ID through the save dialog.
+Scaling fits the source aspect ratio inside the target canvas, pads unused space,
+and normalizes pixel aspect ratio. Range exports leave output dimensions unset.
+
 WindowChrome applies Always on Top with SetWindowPos rather than changing QWindow
 flags. This preserves implicit Windows decorations and the native window handle;
 the desired topmost state is reapplied if the native surface changes.

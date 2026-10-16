@@ -65,6 +65,7 @@ qt_add_qml_module(TrieFrameViewer
         ui/views/Viewer.qml ui/views/Transport.qml ui/views/ReviewStage.qml
         ui/views/SettingsDialog.qml
         ui/views/ExportProgressDialog.qml
+        ui/views/ExportVideoDialog.qml
 )
 set_target_properties(TrieFrameViewer PROPERTIES OUTPUT_NAME "TrieFrameViewer")
 install(TARGETS TrieFrameViewer RUNTIME DESTINATION .)

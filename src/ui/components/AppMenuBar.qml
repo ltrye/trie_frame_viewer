@@ -268,6 +268,10 @@ Controls.MenuBar {
     ReviewMenu {
         title: qsTr("&Tools")
         Command {
+            actionId: "exportVideo"
+            enabled: player.loaded && !player.clipExporter.busy
+        }
+        Command {
             actionId: "exportRange"
             enabled: player.loaded && !player.clipExporter.busy
         }

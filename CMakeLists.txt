@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(TrieFrameViewer VERSION 1.2.0 LANGUAGES CXX)
+project(TrieFrameViewer VERSION 1.3.0 LANGUAGES CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "Trie FrameViewer currently targets Windows only.")

@@ -417,6 +417,60 @@ static bool exportUiSmoke(QQuickWindow& window, tfv::PlayerController& player, c
            buttonsContained;
 }
 
+static bool fullVideoExportUiSmoke(QQuickWindow& window, tfv::PlayerController& player,
+                                   const QString& directory, QJsonObject& report) {
+    auto* options = window.findChild<QObject*>("exportVideoOptionsDialog");
+    auto* resolution = window.findChild<QObject*>("videoExportResolution");
+    auto* save = window.findChild<QObject*>("exportClipDialog");
+    auto* progress = window.findChild<QObject*>("exportProgressDialog");
+    auto* command = window.findChild<QQuickItem*>("menu_exportVideo");
+    auto* exporter = qobject_cast<tfv::ClipExporter*>(player.clipExporter());
+    if (!options || !resolution || !save || !progress || !command || !exporter)
+        return false;
+    clickItem(window, window.findChild<QQuickItem*>("menuTitle_Tools"));
+    QTest::qWait(100);
+    const bool commandAvailable = command->isVisible() && command->isEnabled();
+    clickItem(window, command);
+    QTest::qWait(100);
+    const bool defaultFullHd =
+        options->property("visible").toBool() && options->property("resolutionId").toString() == "fullHd";
+    window.grabWindow().save(directory + "/export-video-options.png");
+    resolution->setProperty("currentIndex", 1);
+    const bool selectable = options->property("resolutionId").toString() == "hd";
+    QMetaObject::invokeMethod(options, "close");
+    QMetaObject::invokeMethod(options, "openForVideo");
+    const bool resetsToFullHd = options->property("resolutionId").toString() == "fullHd";
+    QMetaObject::invokeMethod(options, "close");
+    const bool prepared =
+        QMetaObject::invokeMethod(save, "prepareForVideo", Q_ARG(QVariant, QVariant("fullHd"))) &&
+        save->property("selectedFile").toUrl() == player.suggestedVideoExportUrl("fullHd") &&
+        save->property("wholeVideo").toBool();
+    const int frame = player.currentFrame(), start = player.rangeStart(), end = player.rangeEnd();
+    const bool dirty = player.dirty();
+    const auto target = QUrl::fromLocalFile(directory + "/ui-full-video-export.mp4");
+    save->setProperty("selectedFile", target);
+    QSignalSpy finished(exporter, &tfv::ClipExporter::finished);
+    const bool accepted = QMetaObject::invokeMethod(save, "accepted");
+    const bool completed =
+        QTest::qWaitFor([&] { return !finished.isEmpty(); }, 30000) && finished.first()[0].toBool();
+    tfv::Decoder output;
+    QString error;
+    const bool validOutput = completed && output.open(target.toLocalFile(), error) &&
+                             output.info().width == 1920 && output.info().height == 1080 &&
+                             output.info().frameCount == player.frameCount();
+    const bool reviewUnchanged = player.currentFrame() == frame && player.rangeStart() == start &&
+                                 player.rangeEnd() == end && player.dirty() == dirty;
+    QMetaObject::invokeMethod(progress, "close");
+    report["fullVideoExportInTools"] = commandAvailable;
+    report["fullVideoDefaultFullHd"] = defaultFullHd && resetsToFullHd;
+    report["fullVideoResolutionSelectable"] = selectable;
+    report["fullVideoFilenamePrepared"] = prepared;
+    report["fullVideoExportsAllFramesAtFullHd"] = validOutput;
+    report["fullVideoPreservesReviewRange"] = reviewUnchanged;
+    return commandAvailable && defaultFullHd && resetsToFullHd && selectable && prepared && accepted &&
+           validOutput && reviewUnchanged;
+}
+
 static bool savePromptSmoke(QQuickWindow& window, tfv::PlayerController& player, const QString& directory) {
     auto* dialog = window.findChild<QObject*>("unsavedProjectDialog");
     auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
@@ -712,7 +766,8 @@ static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Prefe
         auto* player = qobject_cast<tfv::PlayerController*>(window.property("player").value<QObject*>());
         const bool topmostValid = alwaysOnTopSmoke(window, *report);
         const bool exportValid = player && exportUiSmoke(window, *player, directory, *report);
-        *valid = topmostValid && exportValid && *valid;
+        const bool fullVideoValid = player && fullVideoExportUiSmoke(window, *player, directory, *report);
+        *valid = topmostValid && exportValid && fullVideoValid && *valid;
         const bool volumeValid = player && volumeUiSmoke(window, *player, preferences, *report);
         (*report)["volumeDragResponsive"] = volumeValid;
         *valid = volumeValid && *valid;

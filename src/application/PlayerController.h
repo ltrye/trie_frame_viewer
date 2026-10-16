@@ -156,6 +156,8 @@ class PlayerController final : public QObject {
     Q_INVOKABLE void relinkMedia(const QUrl& url);
     Q_INVOKABLE bool saveProject(const QUrl& url);
     Q_INVOKABLE bool exportRange(const QUrl& url);
+    Q_INVOKABLE QUrl suggestedVideoExportUrl(const QString& resolutionId) const;
+    Q_INVOKABLE bool exportVideo(const QUrl& url, const QString& resolutionId);
     Q_INVOKABLE void execute(const QString& action);
     Q_INVOKABLE void seek(int frame, bool withAudio = false);
     Q_INVOKABLE void seekTimeline(int frame);
@@ -184,6 +186,7 @@ class PlayerController final : public QObject {
     void relinkRequired(QString missingPath);
 
   private:
+    ClipExportRequest exportRequest(int start, int end) const;
     void seek(int frame, bool withAudio, bool preservePlayback);
     void open(const QString& path, bool project);
     void pause();

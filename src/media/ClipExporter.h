@@ -12,6 +12,7 @@ struct ClipExportRequest {
     QStringList images;
     int start = 0, end = 0, frameCount = 0, width = 0, height = 0;
     double fps = 24;
+    int outputWidth = 0, outputHeight = 0; // Zero keeps source resolution.
 };
 
 // Owns one asynchronous export, independent of the review decoder and its caches.

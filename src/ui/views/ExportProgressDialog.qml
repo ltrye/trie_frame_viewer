@@ -38,7 +38,7 @@ Controls.Dialog {
         }
         Text {
             Layout.fillWidth: true
-            text: dialog.exporter.busy ? qsTr("%1% — Encoding selected frames and source audio.").arg(Math.floor(dialog.exporter.progress * 100)) : dialog.exporter.error.length ? dialog.exporter.error : dialog.cancelled ? qsTr("No clip was saved.") : qsTr("Saved to %1").arg(dialog.exporter.outputPath)
+            text: dialog.exporter.busy ? qsTr("%1% — Encoding video and source audio.").arg(Math.floor(dialog.exporter.progress * 100)) : dialog.exporter.error.length ? dialog.exporter.error : dialog.cancelled ? qsTr("No clip was saved.") : qsTr("Saved to %1").arg(dialog.exporter.outputPath)
             wrapMode: Text.Wrap
             maximumLineCount: 8
             elide: Text.ElideRight

@@ -158,6 +158,12 @@ void Preferences::resetShortcuts() {
 QVariantList Preferences::playbackSpeeds() const {
     return m_defaults.value("playbackSpeeds").toArray().toVariantList();
 }
+QVariantList Preferences::videoExportPresets() const {
+    return exportOptions().value("resolutions").toArray().toVariantList();
+}
+QString Preferences::defaultVideoExportPreset() const {
+    return exportOptions().value("defaultResolution").toString();
+}
 QVariantMap Preferences::shortcuts() const {
     QVariantMap result;
     for (const auto& entry : actions()) {

@@ -13,7 +13,17 @@
   "decodeOptions": [{"id": "auto", "label": "Auto"}, {"id": "software", "label": "CPU"}, {"id": "hardware", "label": "GPU when available"}],
   "volume": 0.7,
   "volumeSaveDelayMs": 250,
-  "export": {"videoEncoder": "libopenh264", "bitsPerPixel": 0.2, "minimumBitrate": 2000000, "maximumBitrate": 80000000, "audioBitrate": 192000, "threads": 2},
+  "export": {
+    "videoEncoder": "libopenh264", "bitsPerPixel": 0.2, "minimumBitrate": 2000000, "maximumBitrate": 80000000, "audioBitrate": 192000, "threads": 2,
+    "defaultResolution": "fullHd",
+    "resolutions": [
+      {"id": "fullHd", "label": "Full HD (1920 × 1080)", "width": 1920, "height": 1080},
+      {"id": "hd", "label": "HD (1280 × 720)", "width": 1280, "height": 720},
+      {"id": "qhd", "label": "QHD (2560 × 1440)", "width": 2560, "height": 1440},
+      {"id": "uhd", "label": "4K (3840 × 2160)", "width": 3840, "height": 2160},
+      {"id": "source", "label": "Source resolution", "width": 0, "height": 0}
+    ]
+  },
   "theme": "dark",
   "debugMode": false,
   "debugRefreshIntervalMs": 500,
@@ -52,6 +62,7 @@
     {"id": "zoomOut", "label": "Zoom out", "shortcut": "", "icon": "fit"},
     {"id": "alwaysOnTop", "label": "Always on top", "shortcut": "", "icon": "settings"},
     {"id": "exportRange", "label": "Export Time range to new clip…", "shortcut": "", "icon": "film"},
+    {"id": "exportVideo", "label": "Export current video to MP4…", "shortcut": "", "icon": "film"},
     {"id": "shortcuts", "label": "Keyboard shortcuts…", "shortcut": "", "icon": "settings"},
     {"id": "about", "label": "About FrameViewer", "shortcut": "", "icon": "film"},
     {"id": "close", "label": "Exit", "shortcut": "", "icon": "close"}
