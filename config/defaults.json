@@ -13,6 +13,7 @@
   "decodeOptions": [{"id": "auto", "label": "Auto"}, {"id": "software", "label": "CPU"}, {"id": "hardware", "label": "GPU when available"}],
   "volume": 0.7,
   "volumeSaveDelayMs": 250,
+  "export": {"videoEncoder": "libopenh264", "bitsPerPixel": 0.2, "minimumBitrate": 2000000, "maximumBitrate": 80000000, "audioBitrate": 192000, "threads": 2},
   "theme": "dark",
   "debugMode": false,
   "debugRefreshIntervalMs": 500,
@@ -50,6 +51,7 @@
     {"id": "zoomIn", "label": "Zoom in", "shortcut": "", "icon": "plus"},
     {"id": "zoomOut", "label": "Zoom out", "shortcut": "", "icon": "fit"},
     {"id": "alwaysOnTop", "label": "Always on top", "shortcut": "", "icon": "settings"},
+    {"id": "exportRange", "label": "Export Time range to new clip…", "shortcut": "", "icon": "film"},
     {"id": "shortcuts", "label": "Keyboard shortcuts…", "shortcut": "", "icon": "settings"},
     {"id": "about", "label": "About FrameViewer", "shortcut": "", "icon": "film"},
     {"id": "close", "label": "Exit", "shortcut": "", "icon": "close"}

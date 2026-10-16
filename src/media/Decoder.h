@@ -4,6 +4,7 @@
 #include <QImage>
 #include <QMetaType>
 #include <QString>
+#include <QStringList>
 #include <functional>
 #include <memory>
 
@@ -24,6 +25,7 @@ class Decoder {
     bool open(const QString& path, QString& error, int threads = 2, bool hardware = false,
               int hardwareMinimumPixels = 0);
     const MediaInfo& info() const;
+    static QStringList imageSequenceFiles(const QString& path);
     QImage frame(int index, QString& error, const std::function<bool()>& cancelled = {});
     VideoFrame videoFrame(int index, QString& error, const std::function<bool()>& cancelled = {},
                           const std::function<void(int, const VideoFrame&)>& intermediate = {},

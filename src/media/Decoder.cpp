@@ -141,9 +141,8 @@ Decoder::~Decoder() = default;
 const MediaInfo& Decoder::info() const {
     return d->meta;
 }
-bool Decoder::open(const QString& path, QString& error, int threads, bool hardware,
-                   int hardwareMinimumPixels) {
-    d = std::make_unique<Impl>();
+QStringList Decoder::imageSequenceFiles(const QString& path) {
+    QStringList images;
     const QFileInfo file(path);
     const auto suffix = file.suffix().toLower();
     if (QStringList{"png", "jpg", "jpeg", "bmp", "tif", "tiff"}.contains(suffix)) {
@@ -155,10 +154,18 @@ bool Decoder::open(const QString& path, QString& error, int threads, bool hardwa
                                             QRegularExpression::escape(match.captured(3)) + "$");
             for (const auto& name : file.dir().entryList(QDir::Files, QDir::Name))
                 if (member.match(name).hasMatch())
-                    d->images.append(file.dir().absoluteFilePath(name));
+                    images.append(file.dir().absoluteFilePath(name));
         }
-        if (d->images.isEmpty())
-            d->images.append(path);
+        if (images.isEmpty())
+            images.append(file.absoluteFilePath());
+    }
+    return images;
+}
+bool Decoder::open(const QString& path, QString& error, int threads, bool hardware,
+                   int hardwareMinimumPixels) {
+    d = std::make_unique<Impl>();
+    d->images = imageSequenceFiles(path);
+    if (!d->images.isEmpty()) {
         const QImage first(d->images.first());
         if (first.isNull()) {
             error = "Image could not be decoded.";

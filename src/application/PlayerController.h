@@ -2,6 +2,7 @@
 #include "Preferences.h"
 #include "domain/BookmarkModel.h"
 #include "media/AudioEngine.h"
+#include "media/ClipExporter.h"
 #include "media/MediaWorker.h"
 #include <QElapsedTimer>
 #include <QJsonObject>
@@ -16,6 +17,8 @@ class PlayerController final : public QObject {
     Q_PROPERTY(bool loading READ loading NOTIFY mediaChanged)
     Q_PROPERTY(QString fileName READ fileName NOTIFY mediaChanged)
     Q_PROPERTY(QUrl suggestedProjectUrl READ suggestedProjectUrl NOTIFY mediaChanged)
+    Q_PROPERTY(QUrl suggestedClipUrl READ suggestedClipUrl NOTIFY playbackChanged)
+    Q_PROPERTY(QObject* clipExporter READ clipExporter CONSTANT)
     Q_PROPERTY(QString mediaDescription READ mediaDescription NOTIFY mediaChanged)
     Q_PROPERTY(int frameCount READ frameCount NOTIFY mediaChanged)
     Q_PROPERTY(double fps READ fps NOTIFY mediaChanged)
@@ -54,6 +57,10 @@ class PlayerController final : public QObject {
     }
     QString fileName() const;
     QUrl suggestedProjectUrl() const;
+    QUrl suggestedClipUrl() const;
+    QObject* clipExporter() {
+        return &m_exporter;
+    }
     QString mediaDescription() const;
     QString decodeBackend() const {
         return m_info.decodeBackend;
@@ -148,6 +155,7 @@ class PlayerController final : public QObject {
     Q_INVOKABLE void openProject(const QUrl& url);
     Q_INVOKABLE void relinkMedia(const QUrl& url);
     Q_INVOKABLE bool saveProject(const QUrl& url);
+    Q_INVOKABLE bool exportRange(const QUrl& url);
     Q_INVOKABLE void execute(const QString& action);
     Q_INVOKABLE void seek(int frame, bool withAudio = false);
     Q_INVOKABLE void seekTimeline(int frame);
@@ -194,6 +202,7 @@ class PlayerController final : public QObject {
     BookmarkModel m_bookmarks;
     MediaWorker m_worker;
     AudioEngine m_audio;
+    ClipExporter m_exporter;
     MediaInfo m_info;
     QTimer m_timer, m_autosave;
     QTimer m_scrubRequests, m_scrubSettle;

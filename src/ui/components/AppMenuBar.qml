@@ -268,6 +268,11 @@ Controls.MenuBar {
     ReviewMenu {
         title: qsTr("&Tools")
         Command {
+            actionId: "exportRange"
+            enabled: player.loaded && !player.clipExporter.busy
+        }
+        Controls.MenuSeparator {}
+        Command {
             actionId: "settings"
         }
         Command {

@@ -69,6 +69,18 @@ persists after 250 ms without another change, with a final flush on shutdown.
 
 ## Threads and ownership
 
+ClipExporter owns a separate bundled FFmpeg process for MP4 exports. The controller
+snapshots the media and inclusive range into ClipExportRequest; QML owns save/progress
+dialogs. The process has bounded encoder thread counts and never uses playback frame
+caches. Progress/error signals return through QProcess. Encoding targets a unique
+temporary file beside the destination, committed with Windows replacement/rename only
+on success. Cancellation, failure, and shutdown remove temporary files. Decoder and
+export share image-sequence discovery so ordering and numbering gaps agree.
+
+WindowChrome applies Always on Top with SetWindowPos rather than changing QWindow
+flags. This preserves implicit Windows decorations and the native window handle;
+the desired topmost state is reapplied if the native surface changes.
+
 - The GUI thread owns PlayerController, BookmarkModel, Preferences, and AudioEngine.
 - MediaWorker owns a joinable C++ worker. The FFmpeg decoder and FrameCache live
   exclusively on that worker. The destructor requests cancellation and joins it.

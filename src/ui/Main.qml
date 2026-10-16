@@ -32,7 +32,7 @@ Controls.ApplicationWindow {
     palette.light: Theme.border
     palette.mid: Theme.border
     palette.dark: Theme.background
-    readonly property bool alwaysOnTop: (flags & Qt.WindowStaysOnTopHint) !== 0
+    readonly property bool alwaysOnTop: windowChrome.alwaysOnTop
     property string pendingAction: ""
     property url pendingUrl
     property bool allowClose: false
@@ -48,6 +48,7 @@ Controls.ApplicationWindow {
     }
 
     WindowChrome {
+        id: windowChrome
         objectName: "windowChrome"
         window: app
         dark: Theme.dark
@@ -153,10 +154,11 @@ Controls.ApplicationWindow {
             player.zoom *= preferences.zoomWheelFactor;
         else if (action === "zoomOut")
             player.zoom /= preferences.zoomWheelFactor;
-        else if (action === "alwaysOnTop") {
-            const wasVisible = app.visible;
-            app.flags = alwaysOnTop ? app.flags & ~Qt.WindowStaysOnTopHint : app.flags | Qt.WindowStaysOnTopHint;
-            app.visible = wasVisible;
+        else if (action === "exportRange") {
+            if (player.loaded && !player.clipExporter.busy)
+                exportDialog.openForRange();
+        } else if (action === "alwaysOnTop") {
+            windowChrome.alwaysOnTop = !windowChrome.alwaysOnTop;
         } else if (action === "cinemaMode")
             setCinemaMode(!cinemaMode);
         else if (action === "exitCinemaMode")
@@ -182,7 +184,7 @@ Controls.ApplicationWindow {
             required property var modelData
             sequence: modelData.shortcut
             autoRepeat: modelData.id !== "cinemaMode" && modelData.id !== "exitCinemaMode"
-            enabled: modelData.shortcut.length > 0 && (modelData.id === "cinemaMode" || !app.textInputActive) && !reviewStage.editingBookmark && !settingsDialog.visible && !unsaved.visible && !aboutDialog.visible && (modelData.id !== "exitCinemaMode" || (app.cinemaMode && !reviewStage.popupOpen))
+            enabled: modelData.shortcut.length > 0 && (modelData.id === "cinemaMode" || !app.textInputActive) && !reviewStage.editingBookmark && !settingsDialog.visible && !exportProgress.visible && !exportDialog.visible && !unsaved.visible && !aboutDialog.visible && (modelData.id !== "exitCinemaMode" || (app.cinemaMode && !reviewStage.popupOpen))
             onActivated: app.dispatch(modelData.id)
         }
     }
@@ -226,6 +228,32 @@ Controls.ApplicationWindow {
         id: relinkDialog
         title: qsTr("Locate the original footage")
         onAccepted: player.relinkMedia(selectedFile)
+    }
+    FileDialog {
+        id: exportDialog
+        objectName: "exportClipDialog"
+        function prepareForRange() {
+            const suggestion = String(player.suggestedClipUrl);
+            currentFolder = suggestion.slice(0, suggestion.lastIndexOf("/") + 1);
+            selectedFile = player.suggestedClipUrl;
+        }
+        function openForRange() {
+            prepareForRange();
+            open();
+        }
+        title: qsTr("Export Time range to new clip")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "mp4"
+        nameFilters: [qsTr("MP4 clips (*.mp4)")]
+        onAccepted: {
+            player.exportRange(selectedFile);
+            exportProgress.begin();
+        }
+    }
+    ExportProgressDialog {
+        id: exportProgress
+        parent: Controls.Overlay.overlay
+        exporter: app.player.clipExporter
     }
     Connections {
         target: player

@@ -5,6 +5,7 @@ add_library(tfv_core STATIC
     media/VideoFrame.cpp media/VideoFrame.h
     media/MediaWorker.cpp media/MediaWorker.h
     media/AudioEngine.cpp media/AudioEngine.h
+    media/ClipExporter.cpp media/ClipExporter.h
     application/Preferences.cpp application/Preferences.h
     application/PlayerController.cpp application/PlayerController.h
     platform/WindowsIntegration.cpp platform/WindowsIntegration.h
@@ -63,9 +64,13 @@ qt_add_qml_module(TrieFrameViewer
         ui/components/Timeline.qml ui/components/BookmarkEditor.qml
         ui/views/Viewer.qml ui/views/Transport.qml ui/views/ReviewStage.qml
         ui/views/SettingsDialog.qml
+        ui/views/ExportProgressDialog.qml
 )
 set_target_properties(TrieFrameViewer PROPERTIES OUTPUT_NAME "TrieFrameViewer")
 install(TARGETS TrieFrameViewer RUNTIME DESTINATION .)
+add_custom_command(TARGET TrieFrameViewer POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${FFMPEG_ROOT}/bin/ffmpeg.exe" "$<TARGET_FILE_DIR:TrieFrameViewer>")
+install(PROGRAMS "${FFMPEG_ROOT}/bin/ffmpeg.exe" DESTINATION .)
 file(GLOB ffmpeg_dlls "${FFMPEG_ROOT}/bin/*.dll")
 foreach(dll IN LISTS ffmpeg_dlls)
     add_custom_command(TARGET TrieFrameViewer POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "${dll}" "$<TARGET_FILE_DIR:TrieFrameViewer>")

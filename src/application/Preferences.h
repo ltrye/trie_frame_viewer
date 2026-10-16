@@ -41,6 +41,9 @@ class Preferences final : public QObject {
     QVariantList playbackSpeeds() const;
     double zoomWheelFactor() const;
     int integer(const QString& key) const;
+    QJsonObject exportOptions() const {
+        return m_defaults.value("export").toObject();
+    }
     void setCacheMiB(int value);
     void setVolume(double value);
     void setTheme(const QString& value);

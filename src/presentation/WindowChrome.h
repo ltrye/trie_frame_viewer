@@ -14,6 +14,7 @@ class WindowChrome : public QObject {
     Q_PROPERTY(QColor textColor READ textColor WRITE setTextColor NOTIFY styleChanged)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY styleChanged)
     Q_PROPERTY(bool applied READ applied NOTIFY appliedChanged)
+    Q_PROPERTY(bool alwaysOnTop READ alwaysOnTop WRITE setAlwaysOnTop NOTIFY alwaysOnTopChanged)
   public:
     explicit WindowChrome(QObject* parent = nullptr);
     QWindow* window() const {
@@ -34,6 +35,10 @@ class WindowChrome : public QObject {
     bool applied() const {
         return m_applied;
     }
+    bool alwaysOnTop() const {
+        return m_alwaysOnTop;
+    }
+    void setAlwaysOnTop(bool enabled);
     void setWindow(QWindow* window);
     void setDark(bool dark);
     void setCaptionColor(const QColor& color);
@@ -42,6 +47,7 @@ class WindowChrome : public QObject {
   signals:
     void styleChanged();
     void appliedChanged();
+    void alwaysOnTopChanged();
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -52,5 +58,6 @@ class WindowChrome : public QObject {
     QPointer<QWindow> m_window;
     QColor m_caption, m_text, m_border;
     bool m_dark = true, m_applied = false, m_scheduled = false;
+    bool m_alwaysOnTop = false;
 };
 } // namespace tfv

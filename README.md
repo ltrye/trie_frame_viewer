@@ -2,7 +2,7 @@
 
 A compact Windows desktop player for animation reference footage and playblasts.
 Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline is
-**v1.0**, with application version **1.1.3**.
+**v1.0**, with application version **1.2.0**.
 
 ## Download and install
 
@@ -25,6 +25,8 @@ app before updating. The accompanying `.sha256` file verifies the download.
 - Cinema Mode (F11) hides the window chrome and viewer tools, with the timeline and playback controls always visible below the video.
 - In/out ranges, looping, ping-pong, and playback speeds.
 - One-row Current frame, Start, and End inputs using 1-based frame numbers.
+- Tools → Export Time range to new clip exports the inclusive Start–End range as H.264/AAC MP4, with progress and cancellation.
+- Always on Top preserves the native title bar and window state.
 - Frame bookmarks on the timeline, name tooltips, and right-click rename, frame change, or delete.
 - Bookmark navigation, compact text menus, and themed Windows title bars.
 - Versioned `.tfv` project save/load, relative media paths, identity checks, and relinking.

@@ -14,6 +14,9 @@
 #include <QTimer>
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 static QQuickItem* visualItem(QQuickItem* parent, const QString& name) {
     if (parent->objectName() == name)
@@ -301,6 +304,117 @@ static bool nativeCaptionMatches(QQuickWindow& window, bool dark) {
     // Caption/text colors are write-only DWM attributes. The adapter reports
     // success only after both Windows calls accept the current theme colors.
     return QGuiApplication::platformName() != "windows" || chrome->property("applied").toBool();
+}
+
+static bool alwaysOnTopSmoke(QQuickWindow& window, QJsonObject& report) {
+    const auto geometry = window.geometry();
+    const auto visibility = window.visibility();
+    auto* command = window.findChild<QQuickItem*>("menu_alwaysOnTop");
+    const auto cycle = [&] {
+        const auto flags = window.flags();
+        const auto state = window.visibility();
+        const auto bounds = window.geometry();
+        const WId id = window.winId();
+#ifdef Q_OS_WIN
+        const auto handle = reinterpret_cast<HWND>(id);
+        const auto style = GetWindowLongPtrW(handle, GWL_STYLE);
+        if (state != QWindow::FullScreen && (style & WS_CAPTION) != WS_CAPTION)
+            return false;
+#endif
+        bool valid = command != nullptr;
+        for (const bool topmost : {true, false, true, false}) {
+            QMetaObject::invokeMethod(&window, "dispatch", Q_ARG(QVariant, QVariant("alwaysOnTop")));
+            QTest::qWait(70);
+            valid = window.property("alwaysOnTop").toBool() == topmost && window.flags() == flags &&
+                    window.visibility() == state && window.geometry() == bounds && window.winId() == id &&
+                    command && command->property("checked").toBool() == topmost && valid;
+#ifdef Q_OS_WIN
+            valid = GetWindowLongPtrW(handle, GWL_STYLE) == style &&
+                    bool(GetWindowLongPtrW(handle, GWL_EXSTYLE) & WS_EX_TOPMOST) == topmost && valid;
+#endif
+        }
+        return valid;
+    };
+    const bool windowed = cycle();
+    bool maximized = true;
+    const bool exposed = window.isExposed();
+    if (exposed) {
+        window.showMaximized();
+        QTest::qWait(200);
+        maximized = window.visibility() == QWindow::Maximized && cycle();
+        window.setVisibility(visibility);
+        window.setGeometry(geometry);
+        QTest::qWait(150);
+    }
+    QMetaObject::invokeMethod(&window, "setCinemaMode", Q_ARG(QVariant, QVariant(true)));
+    QTest::qWait(150);
+    const bool cinema = window.property("cinemaMode").toBool() && cycle();
+    QMetaObject::invokeMethod(&window, "setCinemaMode", Q_ARG(QVariant, QVariant(false)));
+    QTest::qWait(200);
+    const bool restored = window.visibility() == visibility && window.geometry() == geometry;
+#ifdef Q_OS_WIN
+    const bool caption =
+        (GetWindowLongPtrW(reinterpret_cast<HWND>(window.winId()), GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
+#else
+    const bool caption = true;
+#endif
+    report["topmostPreservesCaptionAndWindow"] = windowed && restored && caption;
+    report["topmostMaximizedChecked"] = exposed;
+    report["topmostPreservesMaximizedWindow"] = maximized;
+    report["topmostPreservesCinemaMode"] = cinema;
+    return windowed && maximized && cinema && restored && caption;
+}
+
+static bool exportUiSmoke(QQuickWindow& window, tfv::PlayerController& player, const QString& directory,
+                          QJsonObject& report) {
+    auto* save = window.findChild<QObject*>("exportClipDialog");
+    auto* progress = window.findChild<QObject*>("exportProgressDialog");
+    auto* command = window.findChild<QQuickItem*>("menu_exportRange");
+    auto* exporter = qobject_cast<tfv::ClipExporter*>(player.clipExporter());
+    if (!save || !progress || !command || !exporter)
+        return false;
+    clickItem(window, window.findChild<QQuickItem*>("menuTitle_Tools"));
+    QTest::qWait(100);
+    const bool commandAvailable = command->isVisible() && command->isEnabled();
+    window.grabWindow().save(directory + "/tools-export-menu.png");
+    QTest::keyClick(&window, Qt::Key_Escape);
+    const bool prepared = QMetaObject::invokeMethod(save, "prepareForRange") &&
+                          save->property("selectedFile").toUrl() == player.suggestedClipUrl();
+    const int frame = player.currentFrame(), start = player.rangeStart(), end = player.rangeEnd();
+    const bool dirty = player.dirty(), playing = player.playing();
+    const double speed = player.speed();
+    const auto target = QUrl::fromLocalFile(directory + "/ui-range-export.mp4");
+    save->setProperty("selectedFile", target);
+    QSignalSpy finished(exporter, &tfv::ClipExporter::finished);
+    const bool accepted = QMetaObject::invokeMethod(save, "accepted");
+    const bool progressShown = progress->property("visible").toBool() && exporter->busy();
+    const bool completed = QTest::qWaitFor([&] { return !finished.isEmpty(); }, 15000) &&
+                           finished.first()[0].toBool() && QFileInfo::exists(target.toLocalFile());
+    QTest::qWait(80);
+    window.grabWindow().save(directory + "/export-completed.png");
+    auto* buttons = window.findChild<QQuickItem*>("exportDialogButtons");
+    const auto popupLeft = progress->property("x").toDouble();
+    const auto popupRight = popupLeft + progress->property("width").toDouble();
+    bool buttonsContained = buttons != nullptr;
+    if (buttons)
+        for (auto* button : buttons->findChildren<QQuickItem*>("exportDialogAction")) {
+            const auto left = button->mapToScene({0, 0}).x();
+            buttonsContained =
+                (!button->isVisible() || (left >= popupLeft && left + button->width() <= popupRight)) &&
+                buttonsContained;
+        }
+    const bool reviewUnchanged = player.currentFrame() == frame && player.rangeStart() == start &&
+                                 player.rangeEnd() == end && player.dirty() == dirty &&
+                                 player.playing() == playing && player.speed() == speed;
+    QMetaObject::invokeMethod(progress, "close");
+    report["exportCommandInTools"] = commandAvailable;
+    report["exportFilenameDefaultsToRange"] = prepared;
+    report["exportProgressDialogShown"] = progressShown;
+    report["exportClipSaved"] = completed;
+    report["exportPreservesReviewState"] = reviewUnchanged;
+    report["exportDialogButtonsContained"] = buttonsContained;
+    return commandAvailable && prepared && accepted && progressShown && completed && reviewUnchanged &&
+           buttonsContained;
 }
 
 static bool savePromptSmoke(QQuickWindow& window, tfv::PlayerController& player, const QString& directory) {
@@ -596,6 +710,9 @@ static void finishUiSmoke(QGuiApplication& app, QQuickWindow& window, tfv::Prefe
     QTimer::singleShot(300, &app, [&, directory, report, valid] {
         *valid = window.grabWindow().save(directory + "/review-final.png") && *valid;
         auto* player = qobject_cast<tfv::PlayerController*>(window.property("player").value<QObject*>());
+        const bool topmostValid = alwaysOnTopSmoke(window, *report);
+        const bool exportValid = player && exportUiSmoke(window, *player, directory, *report);
+        *valid = topmostValid && exportValid && *valid;
         const bool volumeValid = player && volumeUiSmoke(window, *player, preferences, *report);
         (*report)["volumeDragResponsive"] = volumeValid;
         *valid = volumeValid && *valid;
@@ -683,6 +800,19 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         if (*done || !player.loaded() || player.cacheUsedMiB() < 1)
             return;
         *done = true;
+        if (qEnvironmentVariable("TFV_SMOKE_FOCUS") == "always-on-top") {
+            window.requestActivate();
+            const bool exposed = QTest::qWaitForWindowExposed(&window, 3000);
+            QJsonObject report;
+            const bool valid = alwaysOnTopSmoke(window, report);
+            report["exposedWindow"] = exposed;
+            window.grabWindow().save(directory + "/always-on-top-restored.png");
+            QFile output(directory + "/always-on-top-report.json");
+            output.open(QIODevice::WriteOnly);
+            output.write(QJsonDocument(report).toJson());
+            QCoreApplication::exit(valid && exposed ? 0 : 4);
+            return;
+        }
         if (qEnvironmentVariable("TFV_SMOKE_FOCUS") == "cinema-window-state") {
             window.requestActivate();
             window.setVisibility(QWindow::Maximized);

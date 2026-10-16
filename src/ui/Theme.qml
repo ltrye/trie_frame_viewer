@@ -50,6 +50,7 @@ QtObject {
     readonly property int bookmarkHitWidth: 16
     readonly property int bookmarkHitHeight: 20
     readonly property int bookmarkEditorWidth: 340
+    readonly property int exportDialogWidth: 460
     readonly property int tooltipDelay: 550
     readonly property int timelineHeight: 56
     readonly property int transitionMs: 110

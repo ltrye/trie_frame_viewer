@@ -111,7 +111,7 @@ def main():
         shutil.rmtree(PAYLOAD)
     run(["cmake", "--install", str(BUILD), "--config", "Release", "--prefix", str(PAYLOAD)])
     dependency_notices()
-    for name in ("TrieFrameViewer.exe", "Qt6Core.dll", "Qt6Quick.dll", "plugins/platforms/qwindows.dll", "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"):
+    for name in ("TrieFrameViewer.exe", "ffmpeg.exe", "Qt6Core.dll", "Qt6Quick.dll", "plugins/platforms/qwindows.dll", "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"):
         if not (PAYLOAD / name).is_file():
             raise RuntimeError(f"Installer payload is missing {name}")
     if any(PAYLOAD.glob("*test*.exe")) or (PAYLOAD / "Qt6Test.dll").exists():

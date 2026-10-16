@@ -31,6 +31,15 @@ void WindowChrome::setDark(bool dark) {
         emit styleChanged();
     }
 }
+void WindowChrome::setAlwaysOnTop(bool enabled) {
+    if (m_alwaysOnTop == enabled)
+        return;
+    m_alwaysOnTop = enabled;
+    // Changing QWindow flags can replace implicit caption/decorations. Change
+    // only the native z-order, preserving the HWND, styles, size and visibility.
+    apply();
+    emit alwaysOnTopChanged();
+}
 void WindowChrome::setCaptionColor(const QColor& color) {
     if (m_caption != color) {
         m_caption = color;
@@ -70,6 +79,10 @@ void WindowChrome::apply() {
 #ifdef Q_OS_WIN
     if (m_window && m_window->handle() && QGuiApplication::platformName() == "windows") {
         const auto handle = reinterpret_cast<HWND>(m_window->winId());
+        const bool topmost = (GetWindowLongPtrW(handle, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+        if (topmost != m_alwaysOnTop)
+            SetWindowPos(handle, m_alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
         const BOOL dark = m_dark;
         DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
         const auto nativeColor = [](const QColor& color) -> COLORREF {

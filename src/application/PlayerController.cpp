@@ -7,7 +7,8 @@
 
 namespace tfv {
 PlayerController::PlayerController(Preferences& preferences, QObject* parent)
-    : QObject(parent), m_preferences(preferences), m_bookmarks(this), m_worker(this), m_audio(this) {
+    : QObject(parent), m_preferences(preferences), m_bookmarks(this), m_worker(this), m_audio(this),
+      m_exporter(preferences.exportOptions(), this) {
     qRegisterMetaType<MediaInfo>();
     qRegisterMetaType<VideoFrame>();
     applyDecodePreferences();
@@ -127,6 +128,27 @@ void PlayerController::applyDecodePreferences() {
     m_worker.setDecodeOptions(m_preferences.decoderThreads(), mode != "software",
                               mode == "auto" ? m_preferences.integer("hardwareMinimumPixels") : 0,
                               m_preferences.integer("prefetchDelayMs"));
+}
+QUrl PlayerController::suggestedClipUrl() const {
+    if (!m_loaded)
+        return {};
+    const QFileInfo media(m_mediaPath);
+    return QUrl::fromLocalFile(media.absolutePath() + '/' + media.completeBaseName() +
+                               QString("_%1-%2.mp4").arg(m_in + 1).arg(m_out + 1));
+}
+bool PlayerController::exportRange(const QUrl& url) {
+    if (!m_loaded)
+        return false;
+    ClipExportRequest request;
+    request.source = m_mediaPath;
+    request.images = m_info.sequence ? Decoder::imageSequenceFiles(m_mediaPath) : QStringList{};
+    request.start = m_in;
+    request.end = m_out;
+    request.frameCount = m_info.frameCount;
+    request.fps = m_info.fps;
+    request.width = m_info.width;
+    request.height = m_info.height;
+    return m_exporter.start(request, url);
 }
 QString PlayerController::mediaDescription() const {
     return QString("%1 × %2  ·  %3 fps  ·  %4")
