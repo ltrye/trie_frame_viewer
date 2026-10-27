@@ -6,6 +6,33 @@
 class RendererTests : public QObject {
     Q_OBJECT
   private slots:
+    void textureStorageRecyclesWithoutChangingPixels() {
+        QQuickWindow window;
+        window.resize(160, 90);
+        tfv::VideoItem surface(window.contentItem());
+        surface.setSize(QSizeF(160, 90));
+        surface.setGpuCacheMiB(1);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        for (int i = 0; i < 48; ++i) {
+            QByteArray y(320 * 180, char(20 + i * 4)), u(160 * 90, char(128)), v = u;
+            const uint8_t* pixels[] = {reinterpret_cast<const uint8_t*>(y.constData()),
+                                       reinterpret_cast<const uint8_t*>(u.constData()),
+                                       reinterpret_cast<const uint8_t*>(v.constData())};
+            const int strides[] = {320, 160, 160};
+            const auto frame =
+                tfv::VideoFrame::copyYuv420(320, 180, pixels, strides, tfv::VideoFrame::Matrix::Bt709, false);
+            surface.setFrame(frame);
+            const auto rendered = window.grabWindow();
+            QVERIFY(!rendered.isNull());
+            const auto gpu = rendered.pixelColor(80, 45), cpu = frame.toImage().pixelColor(80, 45);
+            QVERIFY(qAbs(gpu.red() - cpu.red()) <= 3 && qAbs(gpu.green() - cpu.green()) <= 3 &&
+                    qAbs(gpu.blue() - cpu.blue()) <= 3);
+            QVERIFY(surface.gpuCacheUsedMiB() <= 1.);
+        }
+        QCOMPARE(surface.textureSetsCreated(), quint64(12));
+        QCOMPARE(surface.textureSetsReused(), quint64(36));
+    }
     void nativeYuvMatchesCpuColorConversion() {
         QQuickWindow window;
         window.resize(129, 65);
@@ -68,5 +95,10 @@ class RendererTests : public QObject {
         QCOMPARE(surface.gpuCacheUsedMiB(), first.sizeInBytes() / 1048576.);
     }
 };
-QTEST_MAIN(RendererTests)
+int main(int argc, char** argv) {
+    QGuiApplication app(argc, argv);
+    app.setQuitOnLastWindowClosed(false);
+    RendererTests tests;
+    return QTest::qExec(&tests, argc, argv);
+}
 #include "RendererTests.moc"

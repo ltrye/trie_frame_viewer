@@ -8,6 +8,8 @@
   "decodeMode": "auto",
   "hardwareMinimumPixels": 2073600,
   "prefetchDelayMs": 80,
+  "fineScrubFrameThreshold": 4,
+  "prefetchRetargetFrames": 8,
   "gpuCacheMiB": 64,
   "cacheLimits": {"videoMin": 64, "videoMax": 8192, "videoStep": 64, "gpuMin": 0, "gpuMax": 1024, "gpuStep": 16},
   "decodeOptions": [{"id": "auto", "label": "Auto"}, {"id": "software", "label": "CPU"}, {"id": "hardware", "label": "GPU when available"}],

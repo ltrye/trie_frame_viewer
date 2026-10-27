@@ -1,9 +1,11 @@
 #include "PlayerController.h"
 #include "domain/ProjectDocument.h"
+#include "media/PlaybackTrace.h"
 #include <QFileInfo>
 #include <QJsonArray>
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace tfv {
 PlayerController::PlayerController(Preferences& preferences, QObject* parent)
@@ -21,6 +23,8 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
     m_scrubSettle.setInterval(m_preferences.integer("scrubSettleMs"));
     connect(&m_scrubSettle, &QTimer::timeout, this, &PlayerController::finishScrub);
     m_timer.setInterval(4);
+    connect(this, &PlayerController::playbackChanged, this,
+            [this] { m_worker.setPlaybackRange(m_in, m_out, m_playing && !m_scrubbing, m_loop == "loop"); });
     m_timer.setTimerType(Qt::PreciseTimer);
     connect(&m_timer, &QTimer::timeout, this, &PlayerController::tick);
     m_autosave.setInterval(30000);
@@ -61,8 +65,9 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
         emit projectChanged();
     });
     connect(&m_worker, &MediaWorker::decoded, this,
-            [this](quint64 gen, quint64 epoch, int index, VideoFrame image) {
-                if (gen != m_generation || epoch != m_transportEpoch || image.isNull())
+            [this](quint64 gen, quint64 epoch, int index, VideoFrame image, quint64 serial) {
+                if (gen != m_generation || epoch != m_transportEpoch || image.isNull() ||
+                    serial < m_presentedRequestSerial)
                     return;
                 // Completed previews belong to one drag session. Keep the input
                 // cursor at the latest target while showing useful in-flight work.
@@ -83,6 +88,8 @@ PlayerController::PlayerController(Preferences& preferences, QObject* parent)
                 } else if (index != m_requestedFrame)
                     return;
                 m_presentedFrame = index;
+                m_presentedRequestSerial = serial;
+                tracePlayback("gui.accepted", serial, index);
                 emit frameReady(image);
             });
     connect(&m_worker, &MediaWorker::cacheUpdated, this,
@@ -127,7 +134,9 @@ void PlayerController::applyDecodePreferences() {
     const QString mode = m_preferences.decodeMode();
     m_worker.setDecodeOptions(m_preferences.decoderThreads(), mode != "software",
                               mode == "auto" ? m_preferences.integer("hardwareMinimumPixels") : 0,
-                              m_preferences.integer("prefetchDelayMs"));
+                              m_preferences.integer("prefetchDelayMs"),
+                              m_preferences.integer("fineScrubFrameThreshold"),
+                              m_preferences.integer("prefetchRetargetFrames"));
 }
 QUrl PlayerController::suggestedClipUrl() const {
     if (!m_loaded)
@@ -225,6 +234,8 @@ void PlayerController::open(const QString& path, bool project) {
     m_transportEpoch = 0;
     m_requestedFrame = 0;
     m_presentedFrame = -1;
+    m_presentedRequestSerial = 0;
+    m_pendingInputSerial = 0;
     m_info = {};
     m_loaded = false;
     m_loading = true;
@@ -354,6 +365,9 @@ bool PlayerController::restore(const QJsonObject& obj) {
     return true;
 }
 void PlayerController::pause() {
+    if (m_pendingInputSerial)
+        tracePlayback("input.cancelled", m_pendingInputSerial, m_frame);
+    m_pendingInputSerial = 0;
     const bool wasPlaying = m_playing;
     const bool wasScrubbing = m_scrubbing;
     m_scrubRequests.stop();
@@ -382,6 +396,9 @@ void PlayerController::resetClock() {
 void PlayerController::play(int direction) {
     if (!m_loaded)
         return;
+    if (m_pendingInputSerial)
+        tracePlayback("input.cancelled", m_pendingInputSerial, m_frame);
+    m_pendingInputSerial = 0;
     if (m_playing)
         pause();
     m_scrubRequests.stop();
@@ -423,9 +440,15 @@ void PlayerController::tick() {
     if (next != m_requestedFrame)
         requestFrame(next, MediaWorker::RequestKind::Playback);
 }
-void PlayerController::requestFrame(int frame, MediaWorker::RequestKind kind) {
+void PlayerController::requestFrame(int frame, MediaWorker::RequestKind kind, quint64 requestSerial) {
+    m_worker.setPlaybackRange(m_in, m_out, m_playing && !m_scrubbing, m_loop == "loop");
+    if (!requestSerial) {
+        requestSerial = m_worker.reserveRequestSerial();
+        tracePlayback("input", requestSerial, frame, int(kind));
+    }
     m_requestedFrame = frame;
-    m_worker.seek(frame, m_transportEpoch, m_playing && !m_scrubbing ? m_direction : m_scrubDirection, kind);
+    m_worker.seek(frame, m_transportEpoch, m_playing && !m_scrubbing ? m_direction : m_scrubDirection, kind,
+                  requestSerial);
 }
 void PlayerController::seek(int frame, bool withAudio) {
     seek(frame, withAudio, false);
@@ -436,11 +459,18 @@ void PlayerController::seekTimeline(int frame) {
 void PlayerController::seek(int frame, bool withAudio, bool preservePlayback) {
     if (!m_loaded)
         return;
+    const auto inputTime = PlaybackTrace::global().timeUs();
     if (withAudio && m_playing && !preservePlayback)
         pause();
     const int value = std::clamp(frame, 0, m_info.frameCount - 1);
-    if (withAudio && !m_playing && value == m_requestedFrame && value == m_presentedFrame)
+    const auto inputSerial = m_worker.reserveRequestSerial();
+    tracePlayback("input", inputSerial, value,
+                  int(withAudio ? MediaWorker::RequestKind::Preview : MediaWorker::RequestKind::Seek),
+                  inputTime);
+    if (withAudio && !m_playing && value == m_requestedFrame && value == m_presentedFrame) {
+        tracePlayback("input.same", inputSerial, value);
         return;
+    }
     if (value != m_requestedFrame)
         m_scrubDirection = value > m_requestedFrame ? 1 : -1;
     if (value != m_frame) {
@@ -448,6 +478,9 @@ void PlayerController::seek(int frame, bool withAudio, bool preservePlayback) {
         emit positionChanged();
     }
     if (withAudio) {
+        if (m_pendingInputSerial)
+            tracePlayback("input.coalesced", m_pendingInputSerial, value);
+        m_pendingInputSerial = inputSerial;
         if (!m_scrubbing) {
             // Start one preview session, rather than cancelling the decoder at
             // every batch. The worker keeps only the latest pending target.
@@ -464,14 +497,19 @@ void PlayerController::seek(int frame, bool withAudio, bool preservePlayback) {
     m_scrubRequests.stop();
     m_scrubSettle.stop();
     m_scrubbing = false;
+    if (m_pendingInputSerial)
+        tracePlayback("input.cancelled", m_pendingInputSerial, m_frame);
+    m_pendingInputSerial = 0;
     ++m_transportEpoch;
-    requestFrame(value);
+    requestFrame(value, MediaWorker::RequestKind::Seek, inputSerial);
     if (m_playing)
         resetClock();
 }
 void PlayerController::flushScrub() {
-    if (m_loaded && m_scrubbing)
-        requestFrame(m_frame);
+    if (m_loaded && m_scrubbing && m_pendingInputSerial) {
+        const auto serial = std::exchange(m_pendingInputSerial, 0);
+        requestFrame(m_frame, MediaWorker::RequestKind::Preview, serial);
+    }
 }
 void PlayerController::finishScrub() {
     if (!m_loaded)
@@ -479,6 +517,9 @@ void PlayerController::finishScrub() {
     m_scrubRequests.stop();
     m_scrubSettle.stop();
     m_scrubbing = false;
+    if (m_pendingInputSerial)
+        tracePlayback("input.coalesced", m_pendingInputSerial, m_frame);
+    m_pendingInputSerial = 0;
     ++m_transportEpoch;
     requestFrame(m_frame);
     if (m_playing)

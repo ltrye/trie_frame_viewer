@@ -1,8 +1,10 @@
 #include "Decoder.h"
+#include "PlaybackTrace.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QImageReader>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -217,7 +219,9 @@ QImage Decoder::frame(int index, QString& error, const std::function<bool()>& ca
 }
 VideoFrame Decoder::videoFrame(int index, QString& error, const std::function<bool()>& cancelled,
                                const std::function<void(int, const VideoFrame&)>& intermediate,
-                               const std::function<bool(int)>& wanted) {
+                               const std::function<bool(int)>& wanted, quint64 traceRequest) {
+    tracePlayback("decode.begin", traceRequest, index);
+    const auto traceEnd = qScopeGuard([&] { tracePlayback("decode.end", traceRequest, index); });
     error.clear();
     if (cancelled && cancelled())
         return {};
@@ -239,7 +243,9 @@ VideoFrame Decoder::videoFrame(int index, QString& error, const std::function<bo
     // Small forward jumps can continue decoding instead of flushing the GOP.
     if (index <= d->lastIndex || index - d->lastIndex > 256 || d->draining || d->requireSeek) {
         const auto target = d->startPts + llround((double(index) / d->meta.fps) / av_q2d(s->time_base));
+        tracePlayback("seek.begin", traceRequest, index);
         int r = av_seek_frame(d->format, d->stream, target, AVSEEK_FLAG_BACKWARD);
+        tracePlayback("seek.end", traceRequest, index);
         if (r < 0) {
             error = "Seek failed: " + avError(r);
             return {};
@@ -257,13 +263,18 @@ VideoFrame Decoder::videoFrame(int index, QString& error, const std::function<bo
         const int ordinal = pts == AV_NOPTS_VALUE
                                 ? d->lastIndex + 1
                                 : int(llround((pts - d->startPts) * av_q2d(s->time_base) * d->meta.fps));
-        if (ordinal < 0 || (ordinal < index && (!intermediate || (wanted && !wanted(ordinal)))))
+        tracePlayback("codec.frame", traceRequest, ordinal);
+        if (ordinal < 0 || (ordinal < index && (!intermediate || (wanted && !wanted(ordinal))))) {
+            tracePlayback("frame.skipped", traceRequest, ordinal);
             continue;
+        }
         VideoFrame pixels;
         const AVFrame* source = d->decoded;
         if (source->format == AV_PIX_FMT_D3D11) {
+            tracePlayback("download.begin", traceRequest, ordinal);
             av_frame_unref(d->downloaded);
             const int result = av_hwframe_transfer_data(d->downloaded, source, 0);
+            tracePlayback("download.end", traceRequest, ordinal);
             if (result < 0) {
                 error = "GPU frame transfer failed: " + avError(result);
                 return {};
@@ -273,6 +284,7 @@ VideoFrame Decoder::videoFrame(int index, QString& error, const std::function<bo
             d->meta.decodeBackend = "D3D11VA";
         }
         const auto format = AVPixelFormat(source->format);
+        tracePlayback("pixels.begin", traceRequest, ordinal);
         if (format == AV_PIX_FMT_YUV420P || format == AV_PIX_FMT_YUVJ420P || format == AV_PIX_FMT_NV12) {
             const auto matrix = source->colorspace == AVCOL_SPC_BT709        ? VideoFrame::Matrix::Bt709
                                 : source->colorspace == AVCOL_SPC_BT2020_NCL ? VideoFrame::Matrix::Bt2020
@@ -304,6 +316,7 @@ VideoFrame Decoder::videoFrame(int index, QString& error, const std::function<bo
             pixels = VideoFrame(image);
         }
         d->lastIndex = ordinal;
+        tracePlayback("pixels.end", traceRequest, ordinal, pixels.sizeInBytes());
         d->lastImage = pixels;
         if (intermediate && ordinal < index)
             intermediate(ordinal, pixels);

@@ -1,4 +1,8 @@
 qt_add_executable(tfv_tests CoreTests.cpp)
+qt_add_executable(tfv_optimization_tests OptimizationTests.cpp)
+target_link_libraries(tfv_optimization_tests PRIVATE tfv_core Qt6::Test)
+add_test(NAME optimization COMMAND tfv_optimization_tests -o "${CMAKE_BINARY_DIR}/Testing/optimization-results.txt,txt")
+set_tests_properties(optimization PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${Qt6_DIR}/../../../bin;PATH=path_list_prepend:${FFMPEG_ROOT}/bin")
 qt_add_executable(tfv_audio_tests AudioTests.cpp)
 qt_add_executable(tfv_export_tests ExportTests.cpp)
 target_link_libraries(tfv_export_tests PRIVATE tfv_core Qt6::Test)

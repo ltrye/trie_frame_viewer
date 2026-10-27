@@ -194,7 +194,8 @@ class PlayerController final : public QObject {
     void tick();
     void resetClock();
     void restartAudio();
-    void requestFrame(int frame, MediaWorker::RequestKind kind = MediaWorker::RequestKind::Seek);
+    void requestFrame(int frame, MediaWorker::RequestKind kind = MediaWorker::RequestKind::Seek,
+                      quint64 requestSerial = 0);
     void flushScrub();
     void applyDecodePreferences();
     void markDirty();
@@ -211,6 +212,8 @@ class PlayerController final : public QObject {
     QTimer m_scrubRequests, m_scrubSettle;
     QElapsedTimer m_clock;
     quint64 m_generation = 0, m_transportEpoch = 0;
+    quint64 m_presentedRequestSerial = 0;
+    quint64 m_pendingInputSerial = 0;
     int m_requestedFrame = 0;
     int m_scrubDirection = 1;
     int m_presentedFrame = -1;

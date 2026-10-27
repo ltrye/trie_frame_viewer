@@ -29,7 +29,7 @@ class Decoder {
     QImage frame(int index, QString& error, const std::function<bool()>& cancelled = {});
     VideoFrame videoFrame(int index, QString& error, const std::function<bool()>& cancelled = {},
                           const std::function<void(int, const VideoFrame&)>& intermediate = {},
-                          const std::function<bool(int)>& wanted = {});
+                          const std::function<bool(int)>& wanted = {}, quint64 traceRequest = 0);
     static QByteArray decodeAudio(const QString& path, qint64 budget, const std::function<bool()>& cancelled,
                                   QString& warning);
 

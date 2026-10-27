@@ -2,6 +2,7 @@ add_library(tfv_core STATIC
     domain/BookmarkModel.cpp domain/BookmarkModel.h
     domain/ProjectDocument.cpp domain/ProjectDocument.h
     media/FrameCache.h media/Decoder.cpp media/Decoder.h
+    media/FrameRepository.h media/PrefetchPlanner.h media/PlaybackTrace.cpp media/PlaybackTrace.h
     media/VideoFrame.cpp media/VideoFrame.h
     media/MediaWorker.cpp media/MediaWorker.h
     media/AudioEngine.cpp media/AudioEngine.h

@@ -2,7 +2,7 @@
 
 A compact Windows desktop player for animation reference footage and playblasts.
 Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline is
-**v1.0**, with application version **1.3.0**.
+**v1.0**, with application version **1.4.0**.
 
 ## Download and install
 
@@ -17,7 +17,9 @@ app before updating. The accompanying `.sha256` file verifies the download.
 - Numbered PNG/JPEG/BMP sequences (24 fps in this version; other image formats require matching Qt plugins).
 - Compact YUV420 frame caching with bounded RAM use and timeline coverage.
 - Direction-aware refill, reuse of visited frames, and sequential decoding of useful GOP frames.
+- RAM cache hits bypass busy decoding; adaptive prefetch follows the playback range and loop boundary.
 - GPU color conversion and a separate bounded texture cache for recently displayed frames.
+- Compatible evicted GPU textures are recycled within that budget, reducing repeated allocations.
 - Automatic D3D11 hardware decoding for supported 1080p+ footage, with CPU/GPU preferences.
 - Timeline scrubbing and relative right-mouse scrubbing with audio snippets.
 - Timeline clicks/drags preserve playing or paused state, including reverse playback.
@@ -85,7 +87,8 @@ the moving development asset. Qt is pinned to 6.8.3.
 | Screen layouts | `src/ui/views/` and `src/ui/Main.qml` |
 | UI commands and playback state | `src/application/PlayerController.*` |
 | Decoding and compact pixel storage | `src/media/Decoder.*`, `VideoFrame.*` |
-| Background scheduling and cache policy | `src/media/MediaWorker.*`, `FrameCache.h` |
+| Background scheduling and cache policy | `src/media/MediaWorker.*`, `FrameRepository.h`, `FrameCache.h`, `PrefetchPlanner.h` |
+| Opt-in playback tracing and analysis | `src/media/PlaybackTrace.*`, `scripts/analyze_playback_trace.py` |
 | Audio output and scrub snippets | `src/media/AudioEngine.*` |
 | Bookmarks and project schema | `src/domain/` |
 | GPU display integration | `src/presentation/VideoItem.*`, `YuvNode.*`, `shaders/` |
@@ -97,6 +100,8 @@ the moving development asset. Qt is pinned to 6.8.3.
 See `docs/architecture.md` for ownership and extension rules, and
 `docs/project-format.md` for `.tfv` field meanings.
 See `docs/performance.md` for benchmark clips, measurements, and cache limits.
+See `docs/performance-playback-optimization-2026-10-27.md` for v1.4.0 measurements
+and remaining cold-seek/audio limitations.
 See `docs/caching-and-scrubbing.md` for the cache layers, prefetch policy, seek
 scheduling, audio scrubbing, and current limitations.
 

@@ -40,6 +40,18 @@ class VideoFrame {
     quint64 identity() const {
         return m_data ? m_data->id : 0;
     }
+    quint64 requestSerial() const {
+        return m_requestSerial;
+    }
+    int sourceIndex() const {
+        return m_sourceIndex;
+    }
+    VideoFrame forRequest(quint64 serial, int index) const {
+        auto frame = *this;
+        frame.m_requestSerial = serial;
+        frame.m_sourceIndex = index;
+        return frame;
+    }
 
   private:
     struct Data {
@@ -52,6 +64,8 @@ class VideoFrame {
         QImage rgba;
     };
     std::shared_ptr<const Data> m_data;
+    quint64 m_requestSerial = 0;
+    int m_sourceIndex = -1;
 };
 } // namespace tfv
 Q_DECLARE_METATYPE(tfv::VideoFrame)

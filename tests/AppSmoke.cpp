@@ -1,6 +1,8 @@
 #include "AppSmoke.h"
 #include "application/PlayerController.h"
+#include "media/PlaybackTrace.h"
 #include "platform/ResourceMonitor.h"
+#include "presentation/VideoItem.h"
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -161,9 +163,22 @@ static bool bookmarkUiSmoke(QQuickWindow& window, tfv::PlayerController& player,
 
 static bool timelineTransportSmoke(QQuickWindow& window, tfv::PlayerController& player,
                                    tfv::Preferences& preferences) {
+    const auto check = [&](const char* step, bool passed) {
+        if (!passed)
+            qWarning() << "Timeline transport:" << step << "frame" << player.currentFrame() << "playing"
+                       << player.playing() << "direction" << player.direction();
+        return passed;
+    };
     auto* timeline = window.findChild<QQuickItem*>("timeline");
     if (!timeline)
         return false;
+    QSignalSpy delivered(&player, &tfv::PlayerController::frameReady);
+    const auto sawFrame = [&](int target) {
+        for (const auto& signal : delivered)
+            if (qvariant_cast<tfv::VideoFrame>(signal.first()).sourceIndex() == target)
+                return true;
+        return false;
+    };
     window.grabWindow();
     const auto pointFor = [&](int frame) {
         const double x =
@@ -174,19 +189,24 @@ static bool timelineTransportSmoke(QQuickWindow& window, tfv::PlayerController& 
     player.execute("pause");
     player.seek(24);
     player.execute("forward");
+    delivered.clear();
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, pointFor(60));
-    bool valid = player.playing() && player.currentFrame() == 60;
+    // Native click delivery may process a playback tick after the cached target.
+    bool valid = check("forward click", player.playing() && sawFrame(60) && player.currentFrame() >= 60);
     QTest::qWait(200);
-    valid = player.playing() && player.currentFrame() > 60 && valid;
+    valid = check("forward advance", player.playing() && player.currentFrame() > 60) && valid;
     if (player.audioAvailable() && preferences.volume() > 0) {
         auto* audio = player.findChild<tfv::AudioEngine*>();
-        valid = audio && audio->clockAvailable() && valid;
+        valid = check("audio clock", audio && audio->clockAvailable()) && valid;
     }
     player.execute("reverse");
+    delivered.clear();
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, pointFor(36));
-    valid = player.playing() && player.direction() == -1 && player.currentFrame() == 36 && valid;
+    valid = check("reverse click", player.playing() && player.direction() == -1 && sawFrame(36) &&
+                                       player.currentFrame() <= 36) &&
+            valid;
     QTest::qWait(150);
-    valid = player.currentFrame() < 36 && valid;
+    valid = check("reverse advance", player.currentFrame() < 36) && valid;
     player.execute("forward");
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, pointFor(20));
     QTest::qWait(40);
@@ -194,26 +214,29 @@ static bool timelineTransportSmoke(QQuickWindow& window, tfv::PlayerController& 
     QTest::qWait(40);
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, pointFor(50));
     const int releasedFrame = player.currentFrame();
-    valid = player.playing() && releasedFrame >= 50 && valid;
+    valid = check("drag release", player.playing() && releasedFrame >= 50) && valid;
     QTest::qWait(150);
-    valid = player.playing() && player.currentFrame() > releasedFrame && valid;
+    valid = check("drag advance", player.playing() && player.currentFrame() > releasedFrame) && valid;
     player.execute("pause");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, pointFor(15));
     QTest::qWait(100);
-    valid = !player.playing() && player.currentFrame() == 15 && valid;
+    valid = check("paused click", !player.playing() && player.currentFrame() == 15) && valid;
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, pointFor(20));
     QTest::mouseMove(&window, pointFor(30));
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, pointFor(30));
     QTest::qWait(100);
-    valid = !player.playing() && player.currentFrame() == 30 && valid;
+    valid = check("paused drag", !player.playing() && player.currentFrame() == 30) && valid;
     // Bookmark markers share the timeline's transport policy.
     auto* model = qobject_cast<tfv::BookmarkModel*>(player.bookmarks());
     if (model && model->rowCount()) {
         const auto bookmark = *model->at(0);
         auto* marker = visualItem(window.contentItem(), "bookmarkMarker_" + bookmark.id);
         player.execute("forward");
+        delivered.clear();
         clickItem(window, marker);
-        valid = marker && player.playing() && player.currentFrame() == bookmark.frame && valid;
+        valid = check("bookmark click", marker && player.playing() && sawFrame(bookmark.frame) &&
+                                            player.currentFrame() >= bookmark.frame) &&
+                valid;
     } else
         valid = false;
     player.execute("pause");
@@ -855,6 +878,47 @@ void startAppSmoke(QGuiApplication& app, QQuickWindow& window, tfv::PlayerContro
         if (*done || !player.loaded() || player.cacheUsedMiB() < 1)
             return;
         *done = true;
+        if (qEnvironmentVariable("TFV_SMOKE_FOCUS") == "presentation-cache") {
+            window.requestActivate();
+            const bool exposed = QTest::qWaitForWindowExposed(&window, 3000);
+            const auto warm = [&] {
+                for (const auto& range : player.cachedRanges()) {
+                    const auto values = range.toMap();
+                    if (values["start"].toInt() == 0 && values["end"].toInt() >= 10)
+                        return true;
+                }
+                return false;
+            };
+            const bool cached = QTest::qWaitFor(warm, 5000);
+            QTest::qWait(250);
+            for (int frame = 0; frame <= 10; ++frame) {
+                player.seek(frame);
+                QTest::qWait(40);
+            }
+            for (const bool audible : {false, true}) {
+                preferences.setVolume(audible ? 0.02 : 0);
+                tfv::tracePlayback("measure.begin", 0, -1, audible);
+                for (int input = 0; input < 30; ++input) {
+                    player.seek((input * 7) % 11, true);
+                    QTest::qWait(60);
+                }
+                player.finishScrub();
+                QTest::qWait(120);
+                tfv::tracePlayback("measure.end", 0, -1, audible);
+            }
+            auto* surface = window.findChild<tfv::VideoItem*>("videoSurface");
+            const QJsonObject result{
+                {"exposed", exposed},
+                {"targetsCached", cached},
+                {"finalFrame", player.presentedFrame()},
+                {"textureSetsCreated", surface ? qint64(surface->textureSetsCreated()) : -1},
+                {"textureSetsReused", surface ? qint64(surface->textureSetsReused()) : -1}};
+            QFile output(directory + "/presentation-cache-report.json");
+            output.open(QIODevice::WriteOnly);
+            output.write(QJsonDocument(result).toJson());
+            QCoreApplication::exit(exposed && cached && player.presentedFrame() == (29 * 7) % 11 ? 0 : 4);
+            return;
+        }
         if (qEnvironmentVariable("TFV_SMOKE_FOCUS") == "always-on-top") {
             window.requestActivate();
             const bool exposed = QTest::qWaitForWindowExposed(&window, 3000);

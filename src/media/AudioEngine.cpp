@@ -1,6 +1,8 @@
 #include "AudioEngine.h"
+#include "PlaybackTrace.h"
 #include <QAudioDevice>
 #include <QMediaDevices>
+#include <QScopeGuard>
 #include <algorithm>
 #include <cmath>
 
@@ -19,6 +21,8 @@ void AudioEngine::load(QByteArray pcm) {
     m_pcm = std::move(pcm);
 }
 void AudioEngine::stop() {
+    tracePlayback("audio.stop.begin");
+    const auto traceEnd = qScopeGuard([] { tracePlayback("audio.stop.end"); });
     m_feed.stop();
     m_scrubTimer.stop();
     if (m_sink)
@@ -52,6 +56,8 @@ void AudioEngine::scrub(double seconds, int milliseconds, double volume) {
         m_scrubTimer.start();
 }
 void AudioEngine::start(double seconds, double speed, double volume, int limitMilliseconds) {
+    tracePlayback("audio.setup.begin");
+    const auto traceEnd = qScopeGuard([] { tracePlayback("audio.setup.end"); });
     stop();
     if (!std::isfinite(volume))
         volume = 0;
