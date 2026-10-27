@@ -2,7 +2,7 @@
 
 A compact Windows desktop player for animation reference footage and playblasts.
 Built with C++20, Qt Quick/QML, and FFmpeg. The current local release baseline is
-**v1.0**, with application version **1.4.0**.
+**v1.0**, with application version **1.4.1**.
 
 ## Download and install
 

@@ -50,6 +50,7 @@ Item {
                 id: timeline
                 Layout.fillWidth: true
                 player: stage.player
+                debugMode: stage.preferences.debugMode
             }
             Transport {
                 id: transport

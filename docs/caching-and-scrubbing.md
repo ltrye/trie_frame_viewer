@@ -144,7 +144,8 @@ During active playback the planner also respects the Start/End range. Near a
 loop boundary it reserves up to one quarter of its frame capacity at the opposite
 end, subtracting that reserve from the main window rather than adding memory.
 Paused review can prefetch across the full clip. Timeline cache marks represent contiguous **RAM-cached** frame
-ranges; they do not indicate GPU residency. Coverage updates are generally
+ranges and appear only while Debug Mode is enabled; they do not indicate GPU
+residency. Hiding these marks does not disable caching. Coverage updates are generally
 throttled to about 100 ms, with immediate updates at some state transitions.
 
 ## 4. Scrubbing input and scheduling

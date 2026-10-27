@@ -6,6 +6,7 @@ Item {
     id: timeline
     objectName: "timeline"
     required property var player
+    required property bool debugMode
     readonly property bool editingBookmark: bookmarkEditor.visible
     readonly property bool popupOpen: bookmarkMenu.visible || bookmarkEditor.visible
     function closePopups() {
@@ -45,7 +46,7 @@ Item {
         color: Theme.accentSurface
     }
     Repeater {
-        model: player.cachedRanges
+        model: timeline.debugMode ? player.cachedRanges : []
         Rectangle {
             required property var modelData
             x: timeline.xFor(modelData.start)
