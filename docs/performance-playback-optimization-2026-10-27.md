@@ -22,6 +22,14 @@ claims. No matched MPX runtime benchmark was performed.
 - `reference-test.mp4`: generated 640×360, 24 fps, 96 frames, AAC; visible Qt
   Direct3D11 presentation trace, separate from the engine comparisons.
 
+SHA-256 fingerprints (the files themselves are not distributed):
+
+| Media | SHA-256 |
+|---|---|
+| `venom1.mkv` | `3a4c2d5a4c6a31e3aff71dac1e859bb5ef401628a5c6cb7babc8733f32e7db10` |
+| `long-4000.mp4` | `6e94b1355e042938406e4abd09f534987a461b82e65238945ade16d11d85a1c9` |
+| `reference-test.mp4` | `a003f4aed3d226318ed1fbc4480eef1adeda9c8b64f774b95139342758409280` |
+
 ## Engine comparisons
 
 | Workload / run | Baseline p50 / p95 ms | Updated p50 / p95 ms | Baseline / updated peak working set MiB |
