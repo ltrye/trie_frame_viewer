@@ -88,8 +88,11 @@ flags. This preserves implicit Windows decorations and the native window handle;
 the desired topmost state is reapplied if the native surface changes.
 
 - The GUI thread owns PlayerController, BookmarkModel, Preferences, and AudioEngine.
-- MediaWorker owns a joinable C++ worker. The FFmpeg decoder and FrameCache live
-  exclusively on that worker. The destructor requests cancellation and joins it.
+- MediaWorker owns a joinable C++ worker and its FFmpeg decoder. FrameRepository
+  serializes shared FrameCache metadata so GUI requests can retrieve immutable
+  cached pixels while decoding is busy. No codec/GPU work occurs under that lock.
+  Source replacement and eviction destroy retired pixels outside the lock; source
+  replacement frees the old cache on the worker. Destruction cancels and joins it.
 - PCM decoding runs in a separate joinable task so it does not block video requests.
   Changing the source cancels that task; worker destruction joins it.
 - The worker accepts one latest requested seek rather than accumulating mouse moves.
@@ -98,14 +101,19 @@ the desired topmost state is reapplied if the native surface changes.
   playback, completed frames can advance monotonically toward the clock target.
   A drag shares one preview epoch so useful in-flight results can be shown while
   the cursor follows the latest input. Release (or 100 ms of quiet) commits an
-  exact seek in a new epoch, rejecting older previews. Outside preview sessions,
+  exact seek in a new epoch, rejecting older previews. A monotonic request serial
+  also rejects an older preview after a newer cache hit has already been accepted.
+  Outside preview sessions,
   paused seeks accept only the exact target. The actual presented frame and the
   selected/clock target are separate controller state.
 - The RAM cache uses LRU eviction biased toward a window around the playhead and
   scrub/playback direction. Moving the window does not immediately discard visited
   regions. Under byte pressure, old frames outside the window are evicted first.
-  Clips that fit retain all frames. New requests cancel speculative prefetch; a new transport epoch also
-  cancels foreground decoding. Cancellation forces the next decode to seek again
+  Clips that fit retain all frames. PrefetchPlanner adds active-range bounds and a
+  budgeted opposite-end reserve near looping boundaries. Misses, reversals and
+  distant hits cancel speculative work; nearby cache hits update its anchor without
+  repeatedly aborting it. A new transport epoch cancels foreground decoding.
+  Cancellation forces the next decode to seek again
   because the demuxer may have advanced beyond the last returned frame.
 - Foreground seeks materialize only the requested frame, leaving speculative
   intermediate copies/downloads to idle prefetch. Reverse playback retains useful
@@ -115,8 +123,9 @@ the desired topmost state is reapplied if the native surface changes.
   can continue decoding without flushing. Existing cached intermediates are skipped.
 - Mouse seeks update the requested position immediately and coalesce decoder work
   over a configurable 16 ms interval. Mouse release requests the exact final frame.
-  Prefetch waits for a configurable 80 ms quiet interval after foreground requests;
-  cache-coverage notifications are throttled to avoid per-frame UI work.
+  Prefetch begins immediately during playback and fine preview motion; larger
+  jumps and exact paused seeks retain a configurable 80 ms quiet interval.
+  Cache-coverage notifications are revision-filtered and throttled to 100 ms.
 - Queued VideoFrame signals share immutable, owned pixels. Common 8-bit YUV420 and
   NV12 sources are copied into tightly packed Y/U/V planes, without holding FFmpeg
   decoder buffers. QImage conversion happens only for fallback rendering and tests.
@@ -127,7 +136,11 @@ the desired topmost state is reapplied if the native surface changes.
 - GPU textures are created through updatePaintNode. A monotonic frame identity keeps
   texture reuse independent of allocator address reuse. The texture LRU retains recently
   displayed frames only, releases CPU upload bytes after submission, and keeps one
-  current frame even when the configured GPU cache is zero. Its budget counts plane
+  current frame even when the configured GPU cache is zero. Compatible evicted
+  texture sets are recycled in-place within the same budget, with QRhi ordering
+  uploads after earlier draws. Identical frame submissions skip redundant item
+  updates; geometry changes and budget changes still update normally.
+  Its budget counts plane
   pixels, not driver alignment or all graphics allocations.
 - The configured video budget covers retained cache pixels. An in-flight decoder
   frame, presentation frame, decoder internals, audio, and GPU storage are additional.
@@ -177,11 +190,23 @@ layer before adding playlists or A/B sources.
    A bounded decoded-frame cache cannot retain thousands of full-resolution frames
    within a small RAM budget. Direct D3D11 decoder/renderer interoperability can
    remove downloads/uploads, but does not by itself solve full-clip storage.
-3. Add active-range and loop-boundary hints to the direction-aware cache scheduler.
+3. Extend the range-aware scheduler with measured-cost prediction only if traces
+   demonstrate a benefit beyond its current bounded directional windows.
 4. Replace the beginning-only PCM cache with a sliding audio window.
 5. Introduce a command history for editable project state; transient playback is not
    an undoable command.
 6. Move project open/relink/recovery workflow into a document service if it grows.
+
+## Playback diagnostics
+
+PlaybackTrace is disabled unless TFV_TRACE_PATH names an output JSON file. Enabled
+traces buffer at most 32,768 events, count dropped events, and flush outside the
+frame hot path at shutdown. Request serials connect input, cache lookup, decode,
+GUI acceptance, render and Qt frameSwapped events. frameSwapped means queued for
+presentation, not physical monitor display. Audio device setup/stop, compact pixel
+construction, uploads and texture allocations have separate events. Use
+scripts/analyze_playback_trace.py for a summary; never treat a truncated trace or
+an engine-only seek measurement as end-to-end display latency.
 
 ## Formatting
 
